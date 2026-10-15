@@ -1,6 +1,7 @@
 # The winner recipe of cmb-valdo-chain (a03-aniso, 60 epochs, grid without vessel inpainting).
 # Every value not listed here comes from cmbx/config.py DEFAULTS, which ARE the winner recipe;
 # the most important ones are repeated for readability.
+# For a generic case list in data/ (e.g. VALDO). Images must be bias-corrected beforehand (see README "Inputs").
 name: baseline
 data:
   cases: data/cases.csv

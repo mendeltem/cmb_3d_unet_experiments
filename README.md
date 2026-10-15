@@ -47,7 +47,7 @@ conda env create -f environment.yml          # env "cmbx": python 3.12, torch 2.
 conda activate cmbx
 pip install -e .                             # the `cmbx` command
 cmbx check-env                               # torch / CUDA / GPU memory; what is missing
-pytest -q                                    # ~40 tests incl. an end-to-end CV on synthetic phantoms, ~1.5 min on CPU
+pytest -q                                    # 36 tests incl. an end-to-end CV on synthetic phantoms, ~1.5 min on CPU
 ```
 CPU-only machine: replace `cu124` by `cpu` in `environment.yml`. Behind a proxy, export `http_proxy`/`https_proxy`
 first. No FSL, HD-BET or FreeSurfer is needed.
@@ -174,9 +174,10 @@ training hours, max VRAM. `per_case-*.csv` holds case ids: for in-house data it 
 
 ## Runtime and memory
 One 5-fold run of 60 epochs on one GPU (RTX A5000) took **1.6 h for VALDO** (57 cases, `a03-aniso-e60-gd`) and
-**1.7 h / 1.6 h for catalina T2* / SWI**; peak VRAM 1.6-1.8 GiB per training (batch 4, bfloat16). Host RAM: all CV cases
-are held in memory, about 130 MB per case (75 T2* cases ~ 10 GB) plus ~2 GB for the patch buffer. `cmbx prepare`:
-5-20 s per case. CPU training is possible but impractically slow (use it
+**1.7 h / 1.6 h for catalina T2* / SWI** (cmb-valdo-chain runs); peak VRAM 1.6-1.9 GiB per training (batch 4,
+bfloat16; also measured with this package). Host RAM: all CV cases are held in memory (~130 MB per case) plus the
+patch buffer (~2 GB at 800 patches): measured peak 11.5 GB for the 61 SWI cases; about 15 GB expected for the 75 T2*
+cases (17.5 GB was measured before the duplicate patch buffer was removed). `cmbx prepare`: 5-20 s per case. CPU training is possible but impractically slow (use it
 for the tests only).
 
 ## Reference numbers (cmb-valdo-chain)
