@@ -1,12 +1,19 @@
 # In-house cohort catalina-swi (Charité). PATIENT DATA: everything this config writes lives OUTSIDE the
 # repository, in ../cmb_3d_unet_experiments_runs/ (relative to the repository root, where you run cmbx).
-# Case list first (reads the BIDS layout, honours ausgeschlossen.tsv, keeps the folds of participants.tsv):
-#   cmbx make-caselist --bids /home/uchralt/data/bids/catalina-swi --modality swi \
+# Case list first (reads participants.tsv, the reference and brain masks and the bias-corrected images, honours
+# excluded.tsv / duplicates.tsv, reproduces the folds of all earlier in-house results). On ALITA:
+#   cmbx make-caselist --source <...>/DATA/CHARITE/BIDS_SWI --modality swi \
+#        --out ../cmb_3d_unet_experiments_runs/catalina-swi/cases.csv
+# On this machine (source mirror + local derivatives):
+#   cmbx make-caselist --source /home/uchralt/data/sourcedata/catalina/BIDS_SWI --modality swi \
+#        --biascorr-dir /home/uchralt/data/bids/catalina-swi/derivatives/biascorr \
+#        --brainmask-dir /home/uchralt/data/bids/catalina-swi/derivatives/brainmask \
+#        --exclude-tsv /home/uchralt/data/bids/catalina-swi/ausgeschlossen.tsv \
 #        --tissue-pattern "/home/uchralt/data/work/mb-arena/synthseg-swi/robust/{id}_synthseg.nii.gz" \
 #        --out ../cmb_3d_unet_experiments_runs/catalina-swi/cases.csv
 #   cmbx run-experiment configs/catalina_swi.yaml
-# Preprocessing = cmb/transfer/build_private_grids.py of cmb-valdo-chain: the FSL-FAST-corrected derivative is the
-# input (never recomputed -> bias: none), RAS orientation, brain = HD-BET mask & image > 0. Training = winner recipe.
+# Inputs are already bias-corrected (FSL FAST -B on the brain-extracted image, done once on the data, not here).
+# Preparation = cmb/transfer/build_private_grids.py of cmb-valdo-chain: RAS orientation, brain = mask & image > 0.
 name: catalina_swi_baseline
 output_root: ../cmb_3d_unet_experiments_runs/catalina-swi/runs
 data:
@@ -16,7 +23,6 @@ data:
   n_folds: 5
 preprocess:
   reorient: ras
-  bias: none
   brain_mask_mode: mask_and_positive
 train:
   channels: [image, frst]

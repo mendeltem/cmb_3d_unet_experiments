@@ -27,7 +27,6 @@ DEFAULTS: Dict[str, Any] = {
     },
     "preprocess": {
         "reorient": "none",                      # none = keep the axis order of the file (as in training) | ras
-        "bias": "fsl",                           # fsl (FSL fast -B, what the models saw) | n4 | none
         "brain_mask_mode": "mask",               # mask (VALDO grid) | mask_and_positive (in-house grids)
         "spacing": [0.5, 0.5, 1.0],              # mm, (x, y, z) of the array; z = slice axis
         "margin": 8,                             # voxels around the brain bounding box

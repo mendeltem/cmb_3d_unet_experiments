@@ -12,7 +12,7 @@ from cmbx.synthetic import phantom
 
 def _pp(**kw):
     pp = json.loads(json.dumps(DEFAULTS["preprocess"]))
-    pp.update(bias="none", **kw)
+    pp.update(**kw)
     return pp
 
 

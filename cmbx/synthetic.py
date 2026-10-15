@@ -1,5 +1,6 @@
 """Synthetic phantom cases for tests and for trying the pipeline without data (adapted from
-``mb_segment/synthetic.py`` of microbleed_detection_3D_UNET): an ellipsoid 'brain' with a slow bias field, a few
+``mb_segment/synthetic.py`` of microbleed_detection_3D_UNET): an ellipsoid 'brain' (optional slow bias field, off by
+default: real inputs are bias-corrected beforehand), a few
 small dark spheres (microbleed-like, in the label), a bright 'ventricle' with SynthSeg CSF label 4 that holds one
 unlabelled dark sphere (a CSF mimic the CSF rule should remove), and a SynthSeg-like tissue map."""
 from __future__ import annotations
@@ -11,7 +12,7 @@ import nibabel as nib
 import numpy as np
 
 
-def phantom(shape=(64, 64, 24), spacing=(1.0, 1.0, 2.0), n_spots: int = 3, seed: int = 0, bias: bool = True,
+def phantom(shape=(64, 64, 24), spacing=(1.0, 1.0, 2.0), n_spots: int = 3, seed: int = 0, bias: bool = False,
             csf_mimic: bool = True):
     """Returns ``dict(image, label, brain, tissue)`` of NIfTI images."""
     rng = np.random.RandomState(seed)

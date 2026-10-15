@@ -1,7 +1,8 @@
 """Command line: ``cmbx <command> ...`` (or ``python -m cmbx ...``).
 
   cmbx make-phantoms data/phantoms --n 10              synthetic cases + case list, to try everything without data
-  cmbx make-caselist --bids <root> --modality t2star --out <csv>   case list from the in-house BIDS layout
+  cmbx make-caselist --source <BIDS_T2_STAR> --modality t2star --out <csv>   case list for the in-house layout
+  cmbx check-env                                       torch/CUDA etc.: what is there, what is missing
   cmbx prepare --config configs/baseline.yaml          native images -> 0.5 x 0.5 x 1 mm grid + FRST (+ tissue map)
   cmbx split --config configs/baseline.yaml            stratified fold assignment -> data/splits.json
   cmbx cv --config configs/baseline.yaml               5-fold CV (resumable; --folds 0 1 for a subset)
@@ -36,10 +37,20 @@ def cmd_make_phantoms(a):
 
 
 def cmd_make_caselist(a):
-    from .data import caselist_from_bids, write_caselist
-    rows = caselist_from_bids(a.bids, a.modality, a.tissue_pattern, not a.no_folds, _log)
+    from .cohort import build_caselist
+    from .data import write_caselist
+    rows = build_caselist(a.source, a.modality, a.biascorr_dir, a.brainmask_dir, a.exclude_tsv, a.tissue_pattern,
+                          not a.no_quality_checks, os.path.dirname(os.path.abspath(a.out)), _log)
+    if a.no_folds:
+        for r in rows:
+            r["fold"] = ""
     write_caselist(rows, a.out)
     _log(f"case list with {len(rows)} cases -> {a.out}")
+
+
+def cmd_check_env(a):
+    from .checkenv import check_env
+    sys.exit(check_env())
 
 
 def cmd_prepare(a):
@@ -98,13 +109,21 @@ def main(argv=None):
     p.add_argument("--seed", type=int, default=0)
     p.set_defaults(fn=cmd_make_phantoms)
 
-    p = sub.add_parser("make-caselist", help="case list from a BIDS dataset (in-house layout)")
-    p.add_argument("--bids", required=True, help="BIDS root, e.g. /home/uchralt/data/bids/catalina-t2star")
+    p = sub.add_parser("make-caselist", help="case list from the in-house dataset layout (see cmbx/cohort.py)")
+    p.add_argument("--source", required=True, help="e.g. .../DATA/CHARITE/BIDS_T2_STAR (read only)")
     p.add_argument("--modality", choices=["t2star", "swi"], required=True)
-    p.add_argument("--out", required=True, help="case list CSV (keep it OUTSIDE the repository for in-house data)")
+    p.add_argument("--out", required=True, help="case list CSV; reports are written next to it (keep it OUTSIDE the repo)")
+    p.add_argument("--biascorr-dir", default=None,
+                   help="bias-corrected images, <dir>/sub-X/anat/*desc-biascorr*; default <source>/../derivatives/biascorr/<modality>")
+    p.add_argument("--brainmask-dir", default=None, help="brain masks for cases without one in the source")
+    p.add_argument("--exclude-tsv", nargs="*", default=[], help="extra exclusion lists (participant_id column)")
     p.add_argument("--tissue-pattern", default=None, help="SynthSeg path with {id}, for the CSF rule")
-    p.add_argument("--no-folds", action="store_true", help="ignore the fold column of participants.tsv")
+    p.add_argument("--no-quality-checks", action="store_true", help="skip the mask-fit / header-offset report")
+    p.add_argument("--no-folds", action="store_true", help="leave folds empty (cmbx split computes them)")
     p.set_defaults(fn=cmd_make_caselist)
+
+    p = sub.add_parser("check-env", help="check torch/CUDA and the Python packages")
+    p.set_defaults(fn=cmd_check_env)
 
     p = sub.add_parser("prepare", help="preprocess all cases of the case list")
     with_config(p)

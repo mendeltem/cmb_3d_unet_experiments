@@ -1,32 +1,30 @@
-"""From the native T2*/SWI volume to the training grid (port of cmb-valdo-chain ``code/preprocess.py``,
-``code/preproc_roh_bauen.py`` and ``code/gitter_c_bauen.py``; the steps of the winner grid ``gitter_d``):
+"""From the BIAS-CORRECTED native T2*/SWI volume + brain mask to the training grid (port of cmb-valdo-chain
+``code/preproc_roh_bauen.py``, ``code/gitter_c_bauen.py`` and ``cmb/transfer/build_private_grids.py``).
 
-  1. orientation: kept as in the file (``reorient: none``, as in training) or ``as_closest_canonical`` (``ras``);
+Brain extraction and bias-field correction are deliberately NOT part of this package: they are done once, uniformly,
+on the data (in our data: HD-BET or the scanner mask, then FSL ``fast -B`` on the brain-extracted image). The case
+list points ``image`` at the bias-corrected volume.
+
+  1. orientation: kept as in the file (``reorient: none``, VALDO grid) or ``as_closest_canonical`` (``ras``, in-house);
   2. brain mask: the given one, else ``image > 0`` with holes filled (skull-stripped input such as VALDO);
-     ``brain_mask_mode: mask_and_positive`` additionally drops voxels <= 0 of the (bias-corrected) image, as
+     ``brain_mask_mode: mask_and_positive`` additionally drops voxels <= 0 of the image, as
      ``cmb/transfer/build_private_grids.py`` did for the in-house cohorts;
-  3. bias-field correction on the masked image: FSL ``fast -t 2 -n 3 -B -b --nopve`` (what the models saw),
-     N4 (SimpleITK) or none;
-  4. INPAINT HOOK (experiment entry point, off by default): ``inpaint(image, mask) -> image`` on the native grid,
-     after the bias correction and before the inversion -- where MicrobleedNet painted over vessels;
-  5. inverted scale ``1 - I / max(I)`` inside the brain, 0 outside (bright microbleeds; 0 is reserved for outside);
-  6. resampling to 0.5 x 0.5 x 1.0 mm with the CENTRE of the field of view preserved (source index
+  3. INPAINT HOOK (experiment entry point, off by default): ``inpaint(image, mask) -> image`` on the native grid,
+     before the inversion -- where MicrobleedNet painted over vessels;
+  4. inverted scale ``1 - I / max(I)`` inside the brain, 0 outside (bright microbleeds; 0 is reserved for outside);
+  5. resampling to 0.5 x 0.5 x 1.0 mm with the CENTRE of the field of view preserved (source index
      ``i = off + r * j``, ``off = ((N - 1) - r (M - 1)) / 2``), linear, edge slices held (mode nearest); the label by
      nearest neighbour with a rescue of components that nearest sampling would drop;
-  7. crop to the bounding box of the non-zero image plus 8 voxels (the affine is shifted, world coordinates exact);
-  8. the FRST channel on that grid; the SynthSeg tissue map (if given) by nearest neighbour in world coordinates.
+  6. crop to the bounding box of the non-zero image plus 8 voxels (the affine is shifted, world coordinates exact);
+  7. the FRST channel on that grid; the SynthSeg tissue map (if given) by nearest neighbour in world coordinates.
 
 Output per case: ``<out>/<id>/<id>_{image,frst,label[,tissue]}.nii.gz`` + ``info.json`` (axes x, y, z).
 """
 from __future__ import annotations
 
-import glob
 import importlib
 import json
 import os
-import shutil
-import subprocess
-import tempfile
 import time
 from typing import Callable, Dict, Optional
 
@@ -61,66 +59,6 @@ def brain_mask(image: np.ndarray, mask_img: Optional[nib.Nifti1Image]) -> np.nda
             raise ValueError(f"brain mask {m.shape} is not on the image grid {image.shape}")
         return m
     return ndimage.binary_fill_holes(image > 0)
-
-
-# ---------------------------------------------------------------- bias field
-def find_fsl_fast():
-    """``(fast executable, FSLDIR)`` from $FSLDIR, the PATH or the usual install folders, else ``(None, None)``."""
-    roots = [os.environ.get("FSLDIR")]
-    exe = shutil.which("fast")
-    if exe:
-        roots.append(os.path.dirname(os.path.dirname(os.path.realpath(exe))))
-    roots += [os.path.expanduser("~/fsl"), "/usr/local/fsl", "/opt/fsl"]
-    for root in roots:
-        if root and os.path.exists(os.path.join(root, "bin", "fast")):
-            return os.path.join(root, "bin", "fast"), root
-    return None, None
-
-
-def bias_correct(image: np.ndarray, mask: np.ndarray, affine: np.ndarray, method: str = "fsl",
-                 workdir: Optional[str] = None, zooms=None) -> np.ndarray:
-    """Bias-field correction of the masked image. ``method``: fsl | n4 | none."""
-    if method == "none":
-        return image.astype(np.float32)
-    masked = np.where(mask, image, 0).astype(np.float32)
-    if method == "fsl":
-        exe, fsldir = find_fsl_fast()
-        if not exe:
-            raise RuntimeError("bias: fsl requested but FSL 'fast' was not found ($FSLDIR, PATH, ~/fsl); "
-                               "use bias: n4 or bias: none")
-        env = dict(os.environ, FSLDIR=fsldir, FSLOUTPUTTYPE="NIFTI_GZ",
-                   PATH=os.path.join(fsldir, "bin") + os.pathsep + os.environ.get("PATH", ""))
-        own = workdir is None
-        workdir = workdir or tempfile.mkdtemp(prefix="cmbx_fast_")
-        try:
-            src = os.path.join(workdir, "brain.nii.gz")
-            nib.save(nib.Nifti1Image(masked, affine), src)
-            stem = os.path.join(workdir, "fast")
-            r = subprocess.run([exe, "-t", "2", "-n", "3", "-B", "-b", "--nopve", "-o", stem, src],
-                               env=env, capture_output=True, text=True, timeout=3 * 3600)
-            restored = glob.glob(stem + "_restore.nii*")
-            if r.returncode != 0 or not restored:
-                raise RuntimeError(f"FSL fast failed (rc {r.returncode}): {r.stderr[-500:]}")
-            return _squeeze(np.asarray(nib.load(restored[0]).dataobj, dtype=np.float32))
-        finally:
-            if own:
-                shutil.rmtree(workdir, ignore_errors=True)
-    if method == "n4":
-        import SimpleITK as sitk
-        img = sitk.GetImageFromArray(np.ascontiguousarray(masked.transpose(2, 1, 0)))
-        msk = sitk.GetImageFromArray(np.ascontiguousarray(mask.transpose(2, 1, 0)).astype(np.uint8))
-        if zooms is not None:
-            img.SetSpacing(tuple(float(v) for v in zooms))
-        msk.CopyInformation(img)
-        small, small_mask = sitk.Shrink(img, [4] * 3), sitk.Shrink(msk, [4] * 3)
-        corrector = sitk.N4BiasFieldCorrectionImageFilter()
-        corrector.SetMaximumNumberOfIterations([50] * 4)
-        corrector.Execute(small, small_mask)
-        corrected = img / sitk.Exp(corrector.GetLogBiasFieldAsImage(img))
-        out = sitk.GetArrayFromImage(corrected).transpose(2, 1, 0).astype(np.float32)
-        out[~mask] = 0.0
-        return out
-    raise ValueError(f"unknown bias method {method!r} (fsl | n4 | none)")
 
 
 # ---------------------------------------------------------------- inpainting (EXPERIMENT ENTRY POINT)
@@ -182,7 +120,7 @@ def resolve_inpainter(method: str) -> Optional[Callable]:
 
 def inpaint(image: np.ndarray, mask: np.ndarray, brain: np.ndarray, method: str = "mean", dilate_voxels: int = 0,
             **options) -> np.ndarray:
-    """THE HOOK: paint over ``mask`` (e.g. a vessel mask, other lesions) in the bias-corrected native image.
+    """THE HOOK: paint over ``mask`` (e.g. a vessel mask, other lesions) in the (bias-corrected) native image.
 
     Called by ``prepare_case`` when ``preprocess.inpaint.method`` is not ``none``. To test your own method, write
     ``def my_fill(image, mask, brain, **options) -> image`` in an importable module and set
@@ -327,8 +265,7 @@ def prepare_case(case: Dict, out_dir: str, pp: Dict, overwrite: bool = False) ->
     mask = brain_mask(image, same_grid(case["brain_mask"]) if case.get("brain_mask") else None)
     label = (_squeeze(np.asarray(same_grid(case["label"]).dataobj)) > 0).astype(np.uint8) if case.get("label") \
         else np.zeros(image.shape, np.uint8)
-    zooms = np.sqrt((src.affine[:3, :3] ** 2).sum(0))
-    corrected = bias_correct(image, mask, src.affine, pp["bias"], zooms=zooms)
+    corrected = image                               # the input IS the bias-corrected image (done outside)
 
     ip = pp.get("inpaint", {}) or {}
     inpaint_info = {"method": ip.get("method", "none")}

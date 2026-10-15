@@ -21,7 +21,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-n4 = ["SimpleITK>=2.3"]
 test = ["pytest>=7"]
 
 [project.scripts]

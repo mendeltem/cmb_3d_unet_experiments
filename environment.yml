@@ -20,5 +20,4 @@ dependencies:
       - scikit-image>=0.22
       - pandas>=2.0
       - pyyaml>=6.0
-      - SimpleITK>=2.3        # optional: N4 bias-field correction when FSL is not installed
       - pytest>=7

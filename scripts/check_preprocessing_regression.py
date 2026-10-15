@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Regression check: `cmbx` preprocessing against the training grid of cmb-valdo-chain (VALDO, ``dev/gitter_d``).
 
-Two routes per case, both compared voxel by voxel with ``<gitter_d>/<id>/<id>_{image,frst,label}.nii.gz``:
-  A  from the bias-corrected input the original used (``dev/preproc/<id>/fast_restore.nii.gz``), bias: none,
-     brain mask = binary_fill_holes(VALDO T2S > 0)  -> isolates inversion, resampling, crop, FRST, label handling;
-  B  from the raw VALDO T2S, bias: fsl (FSL fast run anew), no mask given -> the full chain.
+Starts, like every cmbx input, from the BIAS-CORRECTED image: the FSL FAST -B output the original used
+(``dev/preproc/<id>/fast_restore.nii.gz``, made by cmb-valdo-chain ``code/preprocess.py``: ``fast -t 2 -n 3 -B -b
+--nopve`` on the skull-stripped VALDO T2S), with brain mask = binary_fill_holes(VALDO T2S > 0) and the VALDO CMB
+label; compared voxel by voxel with ``<gitter_d>/<id>/<id>_{image,frst,label}.nii.gz``.
 Only for the machine that holds those folders; writes into --work (never into the repository).
 
-  python scripts/check_preprocessing_regression.py --cases sub-101 sub-305 --routes A B \
+  python scripts/check_preprocessing_regression.py --cases sub-101 sub-305 sub-228 \
       --valdo ~/data/extern/valdo2021/Task2 --preproc .../valdo-t2s/dev/preproc --grid .../valdo-t2s/dev/gitter_d \
       --work /tmp/cmbx-regression
 """
@@ -49,7 +49,6 @@ def compare(new_dir, old_dir, sid):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cases", nargs="+", required=True)
-    ap.add_argument("--routes", nargs="+", default=["A", "B"])
     ap.add_argument("--valdo", required=True)
     ap.add_argument("--preproc", required=True)
     ap.add_argument("--grid", required=True)
@@ -60,25 +59,17 @@ def main():
     for sid in a.cases:
         t2s = f"{a.valdo}/{sid}/{sid}_space-T2S_desc-masked_T2S.nii.gz"
         lab = f"{a.valdo}/{sid}/{sid}_space-T2S_CMB.nii.gz"
-        for route in a.routes:
-            pp = json.loads(json.dumps(DEFAULTS["preprocess"]))
-            out = f"{a.work}/route{route}"
-            if route == "A":
-                v = nib.load(t2s)
-                mpath = f"{a.work}/{sid}_mask.nii.gz"
-                nib.save(nib.Nifti1Image(ndimage.binary_fill_holes(np.asarray(v.dataobj) > 0).astype(np.uint8),
-                                         v.affine), mpath)
-                case = dict(id=sid, image=f"{a.preproc}/{sid}/fast_restore.nii.gz", label=lab, brain_mask=mpath)
-                pp["bias"] = "none"
-            else:
-                case = dict(id=sid, image=t2s, label=lab)
-                pp["bias"] = "fsl"
-            t0 = time.time()
-            prepare_case(case, out, pp, overwrite=True)
-            r = compare(f"{out}/{sid}", f"{a.grid}/{sid}", sid)
-            r["seconds"] = round(time.time() - t0, 1)
-            res[f"{sid}/{route}"] = r
-            print(sid, route, json.dumps(r), flush=True)
+        pp = json.loads(json.dumps(DEFAULTS["preprocess"]))
+        v = nib.load(t2s)
+        mpath = f"{a.work}/{sid}_mask.nii.gz"
+        nib.save(nib.Nifti1Image(ndimage.binary_fill_holes(np.asarray(v.dataobj) > 0).astype(np.uint8), v.affine), mpath)
+        case = dict(id=sid, image=f"{a.preproc}/{sid}/fast_restore.nii.gz", label=lab, brain_mask=mpath)
+        t0 = time.time()
+        prepare_case(case, a.work, pp, overwrite=True)
+        r = compare(f"{a.work}/{sid}", f"{a.grid}/{sid}", sid)
+        r["seconds"] = round(time.time() - t0, 1)
+        res[sid] = r
+        print(sid, json.dumps(r), flush=True)
     json.dump(res, open(f"{a.work}/regression.json", "w"), indent=1)
 
 
