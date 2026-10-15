@@ -1,0 +1,5 @@
+# Control: the same recipe with the T2*/SWI channel only (turnier.py --kanaele t2s).
+# Uses the same prepared volumes as the baseline (the FRST file is simply not read).
+name: no_frst
+train:
+  channels: [image]

@@ -1,0 +1,13 @@
+# Pre-processing experiment: paint over a given mask (e.g. a vessel mask) before the inversion.
+# Needs the case-list column inpaint_mask (same grid as the image). A different preprocessing needs
+# its own prepared folder. Plug in your own method with  method: mypackage.mymodule:my_function
+# (signature: fn(image, mask, brain, **options) -> image, native grid, see cmbx/preprocess.py inpaint()).
+name: inpaint_mean
+data:
+  prepared_dir: data/prepared_inpaint_mean
+preprocess:
+  inpaint:
+    method: mean            # mean | biharmonic | module:function
+    mask_column: inpaint_mask
+    ring_voxels: 2
+    dilate_voxels: 0

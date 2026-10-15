@@ -1,0 +1,24 @@
+# Tiny CPU run on the synthetic phantoms (cmbx make-phantoms data/phantoms): checks that every path runs.
+# Numbers from this config mean nothing.
+name: smoke_cpu
+output_root: runs
+data:
+  cases: data/phantoms/cases.csv
+  prepared_dir: data/phantoms_prepared
+  splits: data/phantoms_splits.json
+  n_folds: 5
+preprocess:
+  bias: none
+  workers: 2
+model:
+  base_channels: 8
+train:
+  epochs: 2
+  min_epochs: 2
+  eval_every: 1
+  n_patches: 8
+  batch_size: 4
+  patch_size: [16, 32, 32]
+  device: cpu
+postprocess:
+  csf_rule: true

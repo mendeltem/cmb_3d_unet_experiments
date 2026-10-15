@@ -1,0 +1,13 @@
+# Never commit data, results or weights.
+data/
+runs/
+*.nii
+*.nii.gz
+*.pt
+*.pth
+*.npy
+*.npz
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/

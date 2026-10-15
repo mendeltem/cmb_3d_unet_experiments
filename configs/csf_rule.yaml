@@ -1,0 +1,10 @@
+# Post-processing experiment: drop components whose majority SynthSeg label is CSF.
+# Needs the case-list column tissue_map (SynthSeg output, e.g. `mri_synthseg --i swi.nii.gz --o seg.nii.gz --robust`).
+# Here the rule is part of the CV: it acts in the inner-fold selection AND on the test fold.
+# Without retraining, the rule can also be applied to the stored maps of the baseline run:
+#   cmbx evaluate runs/baseline --mode crossfold --csf-rule
+# (that is how cmb-valdo-chain measured the +0.06 on VALDO).
+name: csf_rule
+postprocess:
+  csf_rule: true
+  csf_labels: [4, 5, 14, 15, 24, 43, 44]   # lateral/inferior lateral ventricles, 3rd, 4th ventricle, CSF

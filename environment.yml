@@ -1,0 +1,24 @@
+# Conda environment for cmb_3d_unet_experiments.
+#   conda env create -f environment.yml        # creates "cmbx"
+#   conda activate cmbx && pip install -e .
+#
+# PyTorch comes from the official PyTorch wheel index (CUDA 12.4 build, works with any
+# NVIDIA driver >= 550). For a CPU-only machine replace "cu124" by "cpu" below.
+# Behind a proxy, export http_proxy/https_proxy before running conda.
+name: cmbx
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu124
+      - torch==2.6.0
+      - numpy>=1.26,<2.3
+      - scipy>=1.11
+      - nibabel>=5.0
+      - scikit-image>=0.22
+      - pandas>=2.0
+      - pyyaml>=6.0
+      - SimpleITK>=2.3        # optional: N4 bias-field correction when FSL is not installed
+      - pytest>=7

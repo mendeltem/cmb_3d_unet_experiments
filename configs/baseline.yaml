@@ -1,0 +1,27 @@
+# The winner recipe of cmb-valdo-chain (a03-aniso, 60 epochs, grid without vessel inpainting).
+# Every value not listed here comes from cmbx/config.py DEFAULTS, which ARE the winner recipe;
+# the most important ones are repeated for readability.
+name: baseline
+data:
+  cases: data/cases.csv
+  prepared_dir: data/prepared
+  splits: data/splits.json
+  n_folds: 5
+preprocess:
+  bias: fsl                 # fsl | n4 | none (use none if your images are already bias-corrected)
+  spacing: [0.5, 0.5, 1.0]
+  frst: true
+model:
+  name: aniso_unet3d
+  base_channels: 32
+train:
+  channels: [image, frst]
+  epochs: 60
+  min_epochs: 60
+  eval_every: 5
+  n_patches: 800
+  batch_size: 4
+  lr: 3.0e-4
+  seed: 42
+postprocess:
+  csf_rule: false

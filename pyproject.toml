@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cmbx"
+version = "0.1.0"
+description = "5-fold cross-validation and pre/post-processing experiments for cerebral microbleed detection with an anisotropic 3D U-Net"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "mendeltem"}]
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "nibabel>=5.0",
+    "scikit-image>=0.22",
+    "pandas>=2.0",
+    "pyyaml>=6.0",
+    "torch>=2.1",
+]
+
+[project.optional-dependencies]
+n4 = ["SimpleITK>=2.3"]
+test = ["pytest>=7"]
+
+[project.scripts]
+cmbx = "cmbx.cli:main"
+
+[tool.setuptools]
+packages = ["cmbx"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
