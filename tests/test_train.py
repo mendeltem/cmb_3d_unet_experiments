@@ -36,11 +36,14 @@ def _case(seed=0, shape=(30, 70, 100)):
 def test_sample_patches_shapes_and_lesion_share():
     T = dict(DEFAULTS["train"], n_patches=50)
     recs = {"c": _case()}
-    x, y = sample_patches(recs, ["c"], np.random.RandomState(1), T)
+    ep = sample_patches(recs, ["c"], np.random.RandomState(1), T)
+    x, y = ep.all()
+    xb, yb = ep.batch(4, 4)
+    assert torch.equal(xb, x[4:8]) and torch.equal(yb, y[4:8])
     assert x.shape == (50, 2, 38, 62, 94) and y.shape == (50, 1, 38, 62, 94)
     assert int((y.flatten(1).sum(1) > 0).sum()) >= int(50 * 0.6)
     T1 = dict(T, channels=["image"])
-    x1, _ = sample_patches(recs, ["c"], np.random.RandomState(1), T1)
+    x1, _ = sample_patches(recs, ["c"], np.random.RandomState(1), T1).all()
     assert x1.shape[1] == 1
 
 

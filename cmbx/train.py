@@ -81,7 +81,26 @@ def sample_patches(recs: Dict[str, PreparedCase], train_ids: List[str], rng: np.
                     p, lab = np.flip(p, ax), np.flip(lab, ax)
         xs[j], ys[j] = p, lab
     idx = rng.permutation(n)
-    return torch.from_numpy(xs[idx]), torch.from_numpy(ys[idx])
+    return EpochPatches(xs, ys, idx)
+
+
+class EpochPatches:
+    """The epoch's patches in drawn order plus the shuffle permutation. Batches are gathered through the
+    permutation (``batch(b0, bs)`` == ``xs[idx][b0:b0+bs]`` of cv5.stichprobe) without a second full copy of the
+    buffer (saves ~2 GB host RAM at 800 patches)."""
+
+    def __init__(self, xs: np.ndarray, ys: np.ndarray, idx: np.ndarray) -> None:
+        self.xs, self.ys, self.idx = xs, ys, idx
+
+    def __len__(self) -> int:
+        return len(self.idx)
+
+    def batch(self, b0: int, bs: int):
+        j = self.idx[b0:b0 + bs]
+        return torch.from_numpy(self.xs[j]), torch.from_numpy(self.ys[j])
+
+    def all(self):
+        return torch.from_numpy(self.xs[self.idx]), torch.from_numpy(self.ys[self.idx])
 
 
 # ---------------------------------------------------------------- loss
@@ -141,10 +160,10 @@ def train_fold(cfg: Dict, recs: Dict[str, PreparedCase], split: Dict, k: int, ou
         model.train()
         t_ep = time.time()
         losses = []
-        xb, yb = sample_patches(recs, train_ids, rng, T)
+        patches = sample_patches(recs, train_ids, rng, T)
         bs = int(T["batch_size"])
-        for b0 in range(0, len(xb), bs):
-            x2, y2 = xb[b0:b0 + bs].to(device), yb[b0:b0 + bs].to(device)
+        for b0 in range(0, len(patches), bs):
+            x2, y2 = (t.to(device) for t in patches.batch(b0, bs))
             opt.zero_grad(set_to_none=True)
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=use_amp):
                 loss = loss_fn(model(x2), y2)
@@ -152,6 +171,7 @@ def train_fold(cfg: Dict, recs: Dict[str, PreparedCase], split: Dict, k: int, ou
             opt.step()
             losses.append(float(loss))
         sched.step()
+        del patches
         row = dict(epoch=ep, loss=round(float(np.mean(losses)), 4), train_s=round(time.time() - t_ep, 1))
         if ep % int(T["eval_every"]) == 0 or ep == max_ep:
             _check_time(t0, limit, f"inner evaluation at epoch {ep}")

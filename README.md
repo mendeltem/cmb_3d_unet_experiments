@@ -191,7 +191,25 @@ Stage 1 only (this U-Net, inner-fold selection, no second-stage classifier), les
 Seed noise between runs is about +-0.03-0.08 F1, so compare variants with the same seed and, better, several seeds.
 The VALDO numbers come from a different dataset (public, 3 sites) and are not a target for the in-house cohorts.
 
-VALIDATION_PLACEHOLDER
+## Validation of this port (15 Oct 2026, on the machine the original ran on)
+* `pytest`: all tests pass in a fresh conda env made from `environment.yml`.
+* **Cohort.** `cmbx make-caselist` on the source layout (`sourcedata/catalina/BIDS_*` + the local `biascorr` /
+  `brainmask` derivatives + the exclusion list) yields exactly the training cohorts of cmb-valdo-chain: 75 T2* and 61
+  SWI cases, identical case ids, lesion counts and folds, and byte-identical image / reference / brain-mask files.
+* **Preprocessing.** `cmbx prepare` on these case lists reproduces the private grids of cmb-valdo-chain
+  (`mb-arena/gitter/{t2star,swi}`) **bit for bit** for all 75 T2* and 61 SWI cases (image, FRST, label; 828 / 652
+  lesion components; affines within 8e-6 mm). VALDO, from the FAST-corrected input of `dev/preproc` (3 cases, one per
+  site): `dev/gitter_d` reproduced to float precision (max |difference| 6e-7 image, 1.5e-7 FRST; labels identical).
+  Scripts: `scripts/compare_prepared_grids.py`, `scripts/check_preprocessing_regression.py`.
+* **Model numerics.** Research checkpoints (`modell.pt`) load into `cmbx.model` and reproduce the stored test-fold
+  probability maps exactly (0 of ~14 M voxels differ, GPU bfloat16) for the fold-0 models of VALDO, catalina T2* and
+  catalina SWI (`scripts/check_model_numerics.py`).
+* **Training path.** Against the original `cv5.py` / `netze.py` imported read-only: identical sampled patches and
+  shuffle for the same seed, identical initial weights, identical loss and weights after AdamW steps
+  (`scripts/check_training_equivalence.py`).
+* **GPU path.** Short 5-fold CVs (4 epochs, inner evaluation every 2) ran end to end on the GPU for catalina T2* and
+  SWI (numbers in the hand-over notes; the outputs stay outside the repository). These are plumbing checks, not
+  results: the reference numbers above need the full 60 epochs.
 
 ## Provenance of every default
 | setting | value | source in cmb-valdo-chain |
