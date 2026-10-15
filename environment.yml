@@ -2,8 +2,9 @@
 #   conda env create -f environment.yml        # creates "cmbx"
 #   conda activate cmbx && pip install -e .
 #
-# PyTorch comes from the official PyTorch wheel index (CUDA 12.4 build, works with any
-# NVIDIA driver >= 550). For a CPU-only machine replace "cu124" by "cpu" below.
+# PyTorch comes from the official PyTorch wheel index (CUDA 12.4 build). No CUDA toolkit is needed, only an
+# NVIDIA driver >= 525 (CUDA 12 minor-version compatibility). Driver 450-524: replace "cu124" by "cu118".
+# CPU-only machine: replace "cu124" by "cpu". `cmbx check-env` says which one fits.
 # Behind a proxy, export http_proxy/https_proxy before running conda.
 name: cmbx
 channels:

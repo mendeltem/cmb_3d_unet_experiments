@@ -40,6 +40,19 @@ uniformly, on the data, and every experiment starts from the same corrected inpu
 | reference CMB mask, same matrix | manual masks (labels are optional for `cmbx predict`) |
 | optional SynthSeg map | `mri_synthseg --robust` on the T2*/SWI image (CSF rule only) |
 
+## Prerequisites
+
+| | |
+|---|---|
+| GPU | NVIDIA GPU with >= 2 GB memory (one training needs ~1.8 GiB) |
+| NVIDIA driver | **>= 525** for the default CUDA 12.4 build (`cu124`); a driver >= 450 works with the CUDA 11.8 build: replace `cu124` by `cu118` in `environment.yml` |
+| CUDA toolkit | **not needed**: the PyTorch wheels ship the CUDA libraries; only the driver must be installed |
+| RAM | >= 32 GB (peak ~15-17.5 GB for the T2* cohort) |
+| conda | Miniconda / Miniforge; behind a proxy export `http_proxy` / `https_proxy` first |
+
+Check the driver with `nvidia-smi` (version in the top line). `cmbx check-env` reads it and says which build fits.
+The minimum driver versions follow NVIDIA's CUDA minor-version compatibility (Linux: CUDA 12.x >= 525.60.13, CUDA 11.x >= 450.80.02).
+
 ## Install
 
 ```bash
