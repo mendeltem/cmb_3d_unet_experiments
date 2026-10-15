@@ -1,0 +1,25 @@
+# In-house cohort catalina-swi (Charité). PATIENT DATA: everything this config writes lives OUTSIDE the
+# repository, in ../cmb_3d_unet_experiments_runs/ (relative to the repository root, where you run cmbx).
+# Case list first (reads the BIDS layout, honours ausgeschlossen.tsv, keeps the folds of participants.tsv):
+#   cmbx make-caselist --bids /home/uchralt/data/bids/catalina-swi --modality swi \
+#        --tissue-pattern "/home/uchralt/data/work/mb-arena/synthseg-swi/robust/{id}_synthseg.nii.gz" \
+#        --out ../cmb_3d_unet_experiments_runs/catalina-swi/cases.csv
+#   cmbx run-experiment configs/catalina_swi.yaml
+# Preprocessing = cmb/transfer/build_private_grids.py of cmb-valdo-chain: the FSL-FAST-corrected derivative is the
+# input (never recomputed -> bias: none), RAS orientation, brain = HD-BET mask & image > 0. Training = winner recipe.
+name: catalina_swi_baseline
+output_root: ../cmb_3d_unet_experiments_runs/catalina-swi/runs
+data:
+  cases: ../cmb_3d_unet_experiments_runs/catalina-swi/cases.csv
+  prepared_dir: ../cmb_3d_unet_experiments_runs/catalina-swi/prepared
+  splits: ../cmb_3d_unet_experiments_runs/catalina-swi/splits.json
+  n_folds: 5
+preprocess:
+  reorient: ras
+  bias: none
+  brain_mask_mode: mask_and_positive
+train:
+  channels: [image, frst]
+  epochs: 60
+postprocess:
+  csf_rule: false

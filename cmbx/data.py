@@ -14,6 +14,7 @@ Relative paths are resolved against the folder of the case list.
 from __future__ import annotations
 
 import csv
+import glob
 import json
 import os
 import random
@@ -169,3 +170,87 @@ def prepared_lesion_counts(prepared_dir: str, ids) -> Dict[str, int]:
         info = json.load(open(os.path.join(prepared_dir, sid, "info.json")))
         out[sid] = int(info["n_lesions"])
     return out
+
+
+# ---------------------------------------------------------------- BIDS case lists (in-house cohorts)
+BIDS_STEMS = {"t2star": "_T2starw", "swi": "_acq-swi_T2starw"}
+
+
+def _read_tsv(path: str) -> List[Dict]:
+    with open(path, newline="") as f:
+        return list(csv.DictReader(f, delimiter="\t"))
+
+
+def caselist_from_bids(root: str, modality: str, tissue_pattern: Optional[str] = None, use_folds: bool = True,
+                       log=print) -> List[Dict]:
+    """Case list for a BIDS dataset in the layout of the in-house cohorts:
+
+        sub-XXX/anat/sub-XXX<stem>.nii.gz                                         image (stem _T2starw / _acq-swi_T2starw)
+        derivatives/biascorr/sub-XXX/anat/sub-XXX<stem>_desc-biascorr_T2starw.nii.gz   FSL FAST -B, computed once
+        derivatives/brainmask/sub-XXX/anat/sub-XXX<stem>_desc-brain_mask.nii.gz       HD-BET / scanner mask
+        derivatives/manual-cmb/sub-XXX/anat/*cmb*.nii.gz                             reference
+        participants.tsv (optional column fold), ausgeschlossen.tsv (excluded cases, honoured)
+
+    The bias-corrected derivative is used as the image whenever it exists (so preprocess.bias must be ``none``;
+    it is never recomputed); without it the raw image is used, as ``build_private_grids.py`` did, with a warning.
+    ``tissue_pattern``: optional SynthSeg path with ``{id}``. ``use_folds``: take the fold column of
+    participants.tsv (the folds of all earlier in-house results)."""
+    stem = BIDS_STEMS[modality]
+    excluded = set()
+    ex_path = os.path.join(root, "ausgeschlossen.tsv")
+    if os.path.exists(ex_path) and os.path.getsize(ex_path) > 0:
+        excluded = {r["participant_id"] for r in _read_tsv(ex_path) if r.get("participant_id")}
+    part = {}
+    p_path = os.path.join(root, "participants.tsv")
+    if os.path.exists(p_path):
+        part = {r["participant_id"]: r for r in _read_tsv(p_path)}
+    subjects = sorted(os.path.basename(d) for d in glob.glob(os.path.join(root, "sub-*"))
+                      if os.path.isdir(d))
+    rows, raw_used, missing = [], 0, []
+    for sid in subjects:
+        if sid in excluded:
+            continue
+        raw = os.path.join(root, sid, "anat", f"{sid}{stem}.nii.gz")
+        if not os.path.exists(raw):
+            missing.append((sid, "image"))
+            continue
+        bc = os.path.join(root, "derivatives", "biascorr", sid, "anat", f"{sid}{stem}_desc-biascorr_T2starw.nii.gz")
+        bm = os.path.join(root, "derivatives", "brainmask", sid, "anat", f"{sid}{stem}_desc-brain_mask.nii.gz")
+        labs = sorted(glob.glob(os.path.join(root, "derivatives", "manual-cmb", sid, "anat", "*.nii*")))
+        labs = [x for x in labs if "cmb" in os.path.basename(x).lower()]
+        if not os.path.exists(bm):
+            missing.append((sid, "brain mask"))
+            continue
+        if len(labs) != 1:
+            missing.append((sid, f"{len(labs)} reference masks"))
+            continue
+        if not os.path.exists(bc):
+            raw_used += 1
+        row = dict(id=sid, image=bc if os.path.exists(bc) else raw, label=labs[0], brain_mask=bm,
+                   tissue_map="", inpaint_mask="", group="", fold="")
+        if tissue_pattern:
+            t = tissue_pattern.format(id=sid)
+            row["tissue_map"] = t if os.path.exists(t) else ""
+        if use_folds and sid in part and part[sid].get("fold") not in (None, "", "-1"):
+            row["fold"] = int(part[sid]["fold"])
+        rows.append(row)
+    log(f"{root}: {len(rows)} cases, {len(excluded)} excluded by ausgeschlossen.tsv, "
+        f"{len(missing)} skipped (missing files), {raw_used} without bias-corrected derivative (raw image used)")
+    for sid, what in missing:
+        log(f"  skipped: {what} missing")
+    if tissue_pattern:
+        log(f"  tissue maps found for {sum(1 for r in rows if r['tissue_map'])} of {len(rows)} cases")
+    if use_folds and rows and any(r["fold"] == "" for r in rows):
+        log("  fold column incomplete -> folds left empty, `cmbx split` will compute them")
+        for r in rows:
+            r["fold"] = ""
+    return rows
+
+
+def write_caselist(rows: List[Dict], path: str) -> None:
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    keys = ["id", "image", "label", "brain_mask", "tissue_map", "inpaint_mask", "group", "fold"]
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)

@@ -3,6 +3,8 @@
 
   1. orientation: kept as in the file (``reorient: none``, as in training) or ``as_closest_canonical`` (``ras``);
   2. brain mask: the given one, else ``image > 0`` with holes filled (skull-stripped input such as VALDO);
+     ``brain_mask_mode: mask_and_positive`` additionally drops voxels <= 0 of the (bias-corrected) image, as
+     ``cmb/transfer/build_private_grids.py`` did for the in-house cohorts;
   3. bias-field correction on the masked image: FSL ``fast -t 2 -n 3 -B -b --nopve`` (what the models saw),
      N4 (SimpleITK) or none;
   4. INPAINT HOOK (experiment entry point, off by default): ``inpaint(image, mask) -> image`` on the native grid,
@@ -309,10 +311,17 @@ def prepare_case(case: Dict, out_dir: str, pp: Dict, overwrite: bool = False) ->
     if image.ndim != 3:
         raise ValueError(f"{sid}: expected a 3D image, got {image.shape}")
 
+    affine_offsets = {}
+
     def same_grid(path):
+        """Masks must have the image matrix; small header differences are tolerated (the image grid is used,
+        as in the original scripts) and recorded in info.json."""
         im = load_nifti(path, pp["reorient"])
-        if im.shape[:3] != image.shape or not np.allclose(im.affine, src.affine, atol=1e-3):
-            raise ValueError(f"{sid}: {os.path.basename(path)} is not on the image grid")
+        if im.shape[:3] != image.shape:
+            raise ValueError(f"{sid}: {os.path.basename(path)} {im.shape[:3]} is not on the image matrix {image.shape}")
+        affine_offsets[os.path.basename(path)] = round(float(np.abs(im.affine - src.affine).max()), 6)
+        if not np.allclose(im.affine[:3, :3], src.affine[:3, :3], atol=1e-2 * float(np.abs(src.affine[:3, :3]).max())):
+            raise ValueError(f"{sid}: {os.path.basename(path)} has a different orientation/voxel size than the image")
         return im
 
     mask = brain_mask(image, same_grid(case["brain_mask"]) if case.get("brain_mask") else None)
@@ -333,6 +342,11 @@ def prepare_case(case: Dict, out_dir: str, pp: Dict, overwrite: bool = False) ->
         inpaint_info.update(mask_voxels=int(imask.sum()),
                             label_voxels_under_mask=int((imask & (label > 0)).sum()))
 
+    mode = pp.get("brain_mask_mode", "mask")
+    if mode == "mask_and_positive":                 # build_private_grids.py (in-house cohorts): brain &= image > 0
+        mask = mask & (corrected > 0)
+    elif mode != "mask":
+        raise ValueError(f"brain_mask_mode must be 'mask' or 'mask_and_positive', not {mode!r}")
     inverted = invert(corrected, mask)
     del corrected
     s, M, r, off = target_grid(src.affine, image.shape, spacing)
@@ -378,7 +392,7 @@ def prepare_case(case: Dict, out_dir: str, pp: Dict, overwrite: bool = False) ->
                 components_equal=bool(n_source == n_full == n_crop), label_resampling=lab_info,
                 lesion_voxels=vox_crop, all_lesions_in_crop=bool(vox_full == vox_crop),
                 brain_voxels=int(brain_grid.sum()), brain_mean=round(float(grid_img[brain_grid].mean()), 4),
-                frst=frst_info, inpaint=inpaint_info, preprocess=pp, seconds=round(time.time() - t0, 1))
+                frst=frst_info, inpaint=inpaint_info, mask_affine_offsets=affine_offsets, preprocess=pp, seconds=round(time.time() - t0, 1))
     json.dump(info, open(info_path, "w"), indent=1)
     return info
 
