@@ -25,6 +25,9 @@ def test_end_to_end_cv_on_phantoms(tmp_path):
         assert meta["ok"] and meta["epochs_run"] == 2 and (run / f"fold{k}" / "model.pt").exists()
         assert meta["n_train"] + meta["n_inner"] + meta["n_test"] == 10
     assert s["cases"] == 10 and 0 <= s["f1"] <= 1
+    # the model to keep: trained on all cases after the CV, cell from the folds
+    fm = json.load(open(run / "final" / "meta.json"))
+    assert fm["ok"] and fm["cases"] == 10 and (run / "final" / "model.pt").exists() and "CV folds" in fm["cell_source"]
     split = json.load(open(tmp_path / "splits.json"))
     assert sorted(x for f in split["folds"] for x in f) == [f"phantom-{i:02d}" for i in range(10)]
     # re-scoring the stored maps with other post-processing, no retraining
@@ -48,3 +51,6 @@ def test_end_to_end_cv_on_phantoms(tmp_path):
             w.writerow(dict(id=x["id"], image=os.path.join(base, x["image"]), brain_mask=os.path.join(base, x["brain_mask"])))
     predict_run(str(run), str(sub), str(tmp_path / "pred"), device="cpu", log=print)
     assert os.path.exists(tmp_path / "pred" / "phantom-00_mask.nii.gz")
+    assert json.load(open(tmp_path / "pred" / "phantom-00.json"))["folds"] == 1          # the final model
+    predict_run(str(run), str(sub), str(tmp_path / "pred5"), device="cpu", log=print, use_folds=True)
+    assert json.load(open(tmp_path / "pred5" / "phantom-00.json"))["folds"] == 5

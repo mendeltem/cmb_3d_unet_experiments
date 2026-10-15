@@ -23,14 +23,20 @@ from .preprocess import prepare_all
 from .train import resolve_device
 
 
-def predict_run(run_dir, cases_path, out, threshold=None, min_size=None, device="auto", csf_rule=False, log=print):
+def predict_run(run_dir, cases_path, out, threshold=None, min_size=None, device="auto", csf_rule=False, log=print,
+                use_folds=False):
     cfg = yaml.safe_load(open(os.path.join(run_dir, "config.yaml")))
     T, S = cfg["train"], cfg["selection"]
     device = resolve_device(device)
-    folds = sorted(glob.glob(os.path.join(run_dir, "fold[0-9]*", "model.pt")))
-    folds = [f for f in folds if "_incomplete" not in f]
+    final = os.path.join(run_dir, "final", "model.pt")
+    if os.path.exists(final) and not use_folds:        # default: the one model trained on all cases (cmbx/final.py)
+        folds = [final]
+    else:
+        folds = sorted(glob.glob(os.path.join(run_dir, "fold[0-9]*", "model.pt")))
+        folds = [f for f in folds if "_incomplete" not in f]
     if not folds:
-        raise SystemExit(f"no fold models in {run_dir}")
+        raise SystemExit(f"no final or fold models in {run_dir}")
+    log(f"using {'the final model' if folds == [final] else str(len(folds)) + ' fold models'}")
     metas = [json.load(open(os.path.join(os.path.dirname(f), "meta.json"))) for f in folds]
     if threshold is None or min_size is None:
         (t, m), _ = collections.Counter((x["threshold"], x["min_size"]) for x in metas).most_common(1)[0]

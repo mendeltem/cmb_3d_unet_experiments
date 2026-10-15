@@ -72,7 +72,7 @@ def check_config(cfg: Dict) -> None:
         raise SystemExit("data.n_folds must be >= 3 (test fold + inner fold + training folds)")
 
 
-def run_experiment(cfg: Dict, folds=None, workers: Optional[int] = None, log=print) -> Dict:
+def run_experiment(cfg: Dict, folds=None, workers: Optional[int] = None, log=print, final: bool = True) -> Dict:
     check_config(cfg)
     run_dir = os.path.join(cfg["output_root"], cfg["name"])
     os.makedirs(run_dir, exist_ok=True)
@@ -95,4 +95,7 @@ def run_experiment(cfg: Dict, folds=None, workers: Optional[int] = None, log=pri
     s = run_summary(run_dir, cfg, metas, ev)
     log(f"experiment {cfg['name']}: pooled F1 {s['f1']} in {(time.time() - t0) / 3600:.2f} h -> {run_dir}")
     compare_runs(cfg["output_root"], log=lambda *_: None)
+    if final and len(metas) == split["n_folds"]:      # the model to keep: trained on ALL cases (cmbx/final.py)
+        from .final import train_final
+        train_final(cfg, run_dir, log)
     return s

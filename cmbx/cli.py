@@ -74,7 +74,17 @@ def cmd_run_experiment(a):
     from .config import load_config, parse_set
     from .experiments import run_experiment
     cfg = load_config(a.config_file, parse_set(a.set))
-    run_experiment(cfg, a.folds, a.workers, _log)
+    run_experiment(cfg, a.folds, a.workers, _log, final=not a.no_final)
+
+
+def cmd_train_final(a):
+    from .config import load_config, parse_set
+    from .experiments import check_config, ensure_prepared
+    from .final import train_final
+    cfg = load_config(a.config_file, parse_set(a.set))
+    check_config(cfg)
+    ensure_prepared(cfg, None, log=_log)
+    train_final(cfg, os.path.join(cfg["output_root"], cfg["name"]), _log)
 
 
 def cmd_evaluate(a):
@@ -92,7 +102,7 @@ def cmd_compare(a):
 
 def cmd_predict(a):
     from .predict_cli import predict_run
-    predict_run(a.run, a.cases, a.out, a.threshold, a.min_size, a.device, a.csf_rule, _log)
+    predict_run(a.run, a.cases, a.out, a.threshold, a.min_size, a.device, a.csf_rule, _log, use_folds=a.folds)
 
 
 def main(argv=None):
@@ -147,7 +157,13 @@ def main(argv=None):
     p.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE")
     p.add_argument("--folds", type=int, nargs="*", default=None)
     p.add_argument("--workers", type=int, default=None)
+    p.add_argument("--no-final", action="store_true", help="skip the final model on all cases after the CV")
     p.set_defaults(fn=cmd_run_experiment)
+
+    p = sub.add_parser("train-final", help="train ONE model on all cases -> <run>/final/model.pt")
+    p.add_argument("config_file")
+    p.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE")
+    p.set_defaults(fn=cmd_train_final)
 
     p = sub.add_parser("evaluate", help="(re-)score a finished run")
     p.add_argument("run")
@@ -161,7 +177,7 @@ def main(argv=None):
     p.add_argument("root", nargs="?", default="runs")
     p.set_defaults(fn=cmd_compare)
 
-    p = sub.add_parser("predict", help="fold-ensemble prediction for new, prepared cases")
+    p = sub.add_parser("predict", help="apply the final model of a run (or its 5 fold models) to new cases")
     p.add_argument("--run", required=True)
     p.add_argument("--cases", required=True, help="case list; cases must be prepared in the run's prepared_dir "
                                                   "or in --prepared")
@@ -170,6 +186,7 @@ def main(argv=None):
     p.add_argument("--min-size", type=int, default=None)
     p.add_argument("--device", default="auto")
     p.add_argument("--csf-rule", action="store_true")
+    p.add_argument("--folds", action="store_true", help="use the 5 fold models instead of the final model")
     p.set_defaults(fn=cmd_predict)
 
     a = ap.parse_args(argv)
