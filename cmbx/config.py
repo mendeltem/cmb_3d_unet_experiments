@@ -32,6 +32,9 @@ DEFAULTS: Dict[str, Any] = {
         "margin": 8,                             # voxels around the brain bounding box
         "interpolation_order": 1,                # image resampling order (label: nearest + rescue)
         "frst": True,                            # compute the FRST channel (needed unless channels == [image])
+        "extra_channels": {},                    # own extra input channels: {name: case-list column with a NIfTI on the
+                                                 # image matrix}; brought onto the grid, scaled to [0, 1] in the brain,
+                                                 # then usable as train.channels: [image, frst, <name>]
         "inpaint": {                             # EXPERIMENT ENTRY POINT, see cmbx.preprocess.inpaint
             "method": "none",                    # none | mean | biharmonic | "package.module:function"
             "mask_column": "inpaint_mask",       # case-list column with the mask to paint over
@@ -77,12 +80,15 @@ DEFAULTS: Dict[str, Any] = {
 }
 
 
+FREE_MAPPINGS = {"preprocess.extra_channels"}           # user-chosen keys (channel names), not checked against defaults
+
+
 def deep_merge(base: Dict, override: Dict, path: str = "") -> Dict:
     out = copy.deepcopy(base)
     for k, v in (override or {}).items():
         if k not in out:
             raise KeyError(f"unknown config key {path + k!r} (typo?). Known: {sorted(out)}")
-        if isinstance(out[k], dict) and isinstance(v, dict):
+        if isinstance(out[k], dict) and isinstance(v, dict) and (out[k] or path + k not in FREE_MAPPINGS):
             out[k] = deep_merge(out[k], v, path + k + ".")
         else:
             out[k] = copy.deepcopy(v)

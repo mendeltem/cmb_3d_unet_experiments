@@ -62,8 +62,10 @@ def ensure_split(cfg: Dict, log=print) -> Dict:
 
 def check_config(cfg: Dict) -> None:
     ch = cfg["train"]["channels"]
-    if not ch or ch[0] != "image" or any(c not in ("image", "frst") for c in ch):
-        raise SystemExit("train.channels must start with 'image' and may add 'frst'")
+    allowed = {"image", "frst"} | set(cfg["preprocess"].get("extra_channels") or {})
+    if not ch or ch[0] != "image" or any(c not in allowed for c in ch) or len(set(ch)) != len(ch):
+        raise SystemExit("train.channels must start with 'image' and may add 'frst' and channels named in "
+                         f"preprocess.extra_channels (available: {sorted(allowed)}); got {ch}")
     if "frst" in ch and not cfg["preprocess"]["frst"]:
         raise SystemExit("train.channels uses 'frst' but preprocess.frst is false")
     if int(cfg["data"]["n_folds"]) < 3:

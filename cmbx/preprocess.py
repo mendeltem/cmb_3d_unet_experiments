@@ -239,7 +239,9 @@ def prepare_case(case: Dict, out_dir: str, pp: Dict, overwrite: bool = False) ->
     sid = case["id"]
     dst = os.path.join(out_dir, sid)
     info_path = os.path.join(dst, "info.json")
-    if os.path.exists(info_path) and not overwrite:
+    extra_cfg = dict(pp.get("extra_channels") or {})
+    if os.path.exists(info_path) and not overwrite and all(
+            os.path.exists(os.path.join(dst, f"{sid}_{n}.nii.gz")) for n in extra_cfg):
         return json.load(open(info_path))
     os.makedirs(dst, exist_ok=True)
     t0 = time.time()
@@ -319,6 +321,16 @@ def prepare_case(case: Dict, out_dir: str, pp: Dict, overwrite: bool = False) ->
         files["frst"] = (fr, np.float32)
     if case.get("tissue_map"):
         files["tissue"] = (tissue_to_grid(case["tissue_map"], grid_img.shape, grid_aff), np.int16)
+    for name, col in extra_cfg.items():                 # own extra channel: same grid, same crop, scaled to [0, 1]
+        if name in ("image", "frst", "label", "tissue"):
+            raise ValueError(f"extra channel name {name!r} is reserved")
+        if not case.get(col):
+            raise ValueError(f"{sid}: extra channel {name!r} needs the case-list column {col!r}")
+        ex = _squeeze(np.asarray(same_grid(case[col]).dataobj, dtype=np.float32))
+        v = ex[mask]
+        lo_, hi_ = (np.percentile(v, [0.5, 99.5]) if v.size else (0.0, 1.0))
+        ex = np.where(mask, np.clip((ex - lo_) / max(hi_ - lo_, 1e-6), 0, 1), 0).astype(np.float32)
+        files[name] = (np.ascontiguousarray(resample(ex, r, off, M, order=1)[sl]), np.float32)
     for name, (arr, dt) in files.items():
         save_grid(arr, grid_aff, src.header, os.path.join(dst, f"{sid}_{name}.nii.gz"), dt, spacing)
 

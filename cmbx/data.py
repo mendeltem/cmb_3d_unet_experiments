@@ -46,7 +46,8 @@ def read_cases(path: str) -> List[Dict]:
         if r["id"] in seen:
             raise ValueError(f"{path}: duplicate id {r['id']}")
         seen.add(r["id"])
-        for k in PATH_COLUMNS:
+        nifti_cols = [k for k, v in r.items() if isinstance(v, str) and v.endswith((".nii", ".nii.gz"))]
+        for k in set(PATH_COLUMNS) | set(nifti_cols):     # own columns (extra channels, inpaint masks) too
             if r.get(k) and not os.path.isabs(r[k]):
                 r[k] = os.path.normpath(os.path.join(base, r[k]))
         if r.get("fold") is not None:
@@ -126,11 +127,12 @@ class PreparedCase:
     affine: np.ndarray
     tissue: Optional[np.ndarray] = None
     components: List[np.ndarray] = field(default_factory=list)
+    extra: Dict[str, np.ndarray] = field(default_factory=dict)      # own channels (preprocess.extra_channels)
 
     def channels(self, names) -> List[np.ndarray]:
         out = []
         for n in names:
-            a = getattr(self, n, None)
+            a = self.extra[n] if n in self.extra else getattr(self, n, None)
             if a is None:
                 raise ValueError(f"{self.id}: channel {n!r} not available (prepared without it?)")
             out.append(a)
@@ -159,9 +161,18 @@ def load_prepared(prepared_dir: str, sid: str, channels=("image", "frst"), tissu
             raise FileNotFoundError(f"{sid}: no tissue map in {prepared_dir} (case list column tissue_map)")
         tis = to_zyx(np.asarray(nib.load(f["tissue"]).dataobj).astype(np.int32))
     assert img.shape == lab.shape and (frs is None or frs.shape == img.shape), sid
+    extra = {}
+    for c in channels:                                  # any other channel: <id>_<name>.nii.gz from extra_channels
+        if c in ("image", "frst"):
+            continue
+        p = os.path.join(prepared_dir, sid, f"{sid}_{c}.nii.gz")
+        if not os.path.exists(p):
+            raise FileNotFoundError(f"{sid}: channel {c!r} not prepared ({p}); add it under preprocess.extra_channels")
+        extra[c] = to_zyx(np.asarray(nib.load(p).dataobj, dtype=np.float32))
+        assert extra[c].shape == img.shape, (sid, c)
     ll, n = ndimage.label(lab, structure=N26)
     comps = [np.argwhere(ll == j) for j in range(1, n + 1)]
-    return PreparedCase(sid, img, frs, lab, ni.affine, tis, comps)
+    return PreparedCase(sid, img, frs, lab, ni.affine, tis, comps, extra)
 
 
 def prepared_lesion_counts(prepared_dir: str, ids) -> Dict[str, int]:

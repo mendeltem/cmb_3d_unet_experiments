@@ -1,0 +1,10 @@
+# Experiment: an own second (or third) input channel, e.g. a registered FLAIR, a vesselness or phase map.
+# 1. add a column to cases.csv with one NIfTI per case ON THE IMAGE MATRIX (same voxel grid as the T2*/SWI image)
+# 2. name it here; prepare brings it onto the training grid (same crop) and scales it to [0, 1] inside the brain
+# 3. list it in train.channels; [image, myvessel] replaces FRST, [image, frst, myvessel] adds a third channel
+name: extra_channel_example
+preprocess:
+  extra_channels:
+    myvessel: myvessel_path        # channel name: case-list column
+train:
+  channels: [image, frst, myvessel]
