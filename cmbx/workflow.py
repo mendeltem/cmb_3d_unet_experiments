@@ -155,7 +155,7 @@ def collect(inp: str, label_dir: Optional[str] = None, need_labels: bool = False
     inp = preprocessed_folder(inp)
     folders = case_folders(inp)
     mbnet = is_microbleednet_folder(inp) and not folders
-    work = work or default_work(inp)
+    work = os.path.abspath(work or default_work(inp))     # derived files are listed in a case list: absolute paths
     rows, missing = [], []
     if mbnet:
         # MicrobleedNet layout: images/<n>_preproc (1 - I/max in the brain) + frsts/<n>_frst; a cohort's derivatives/ may

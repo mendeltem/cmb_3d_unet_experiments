@@ -223,3 +223,13 @@ def test_holdout_keeps_microbleed_cases():
         tr, va = holdout_split(ids, 0.8, seed, les)
         assert len(va) == 2 and not set(tr) & set(va) and any(les[s] for s in va)
     assert holdout_split(ids, 1.0, 0, les) == (ids, [])
+
+
+def test_relative_paths_as_in_the_readme(tmp_path, monkeypatch):
+    """README style: relative -i / -m / -o from the repository folder (an absolute-only test missed a doubled path)."""
+    monkeypatch.chdir(tmp_path)
+    write_phantom_preprocessed("train", 10, 0)
+    write_phantom_preprocessed("new", 2, 7, labels=False)
+    main(["train", "-i", "train/derivatives", "-l", "train/derivatives/preprocessed", "-m", "runs/m", "--config", CFG, "-ep", "1"])
+    main(["evaluate", "-i", "new/derivatives", "-m", "runs/m", "-o", "runs/pred"])
+    assert len(os.listdir("runs/pred/final_predictions")) == 2
