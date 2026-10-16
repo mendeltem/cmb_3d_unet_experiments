@@ -80,13 +80,30 @@ def assign_folds(rows: List[Dict], n_folds: int = 5, seed: int = 0) -> None:
         start += len(idx)
 
 
-def _ids_from_tsv(path: str) -> set:
+def _norm_modality(s: str) -> str:
+    """'SWI', 'swi' -> swi; 'T2*', 'T2STAR', 'T2_STAR', 't2starw', 'T2s' -> t2star (CMB modalities only)."""
+    raw = s.strip().lower()
+    a = "".join(ch for ch in raw if ch.isalnum())
+    if a.startswith("swi"):
+        return "swi"
+    if "*" in raw or a.startswith("t2s"):
+        return "t2star"
+    return a
+
+
+def _ids_from_tsv(path: str, modality: Optional[str] = None) -> set:
+    """participant_id column (else the first column). With a ``modality`` column (dataset-level file) only the rows
+    of this modality count (SWI / T2* / T2_STAR / t2star ... compared without case and punctuation)."""
     with open(path, newline="") as f:
         rows = list(csv.reader(f, delimiter="\t"))
     if not rows:
         return set()
-    col = rows[0].index("participant_id") if "participant_id" in rows[0] else 0
-    return {r[col] for r in rows[1:] if len(r) > col and r[col]}
+    head = rows[0]
+    col = head.index("participant_id") if "participant_id" in head else 0
+    mcol = head.index("modality") if (modality and "modality" in head) else None
+    want = _norm_modality(modality) if modality else None
+    return {r[col] for r in rows[1:] if len(r) > col and r[col]
+            and (mcol is None or (len(r) > mcol and _norm_modality(r[mcol]) == want))}
 
 
 def _first(patterns) -> Optional[str]:
@@ -106,11 +123,12 @@ def build_caselist(source: str, modality: str, biascorr_dir: Optional[str] = Non
     biascorr_dir = biascorr_dir or os.path.join(os.path.dirname(src), "derivatives", "biascorr", modality)
     with open(os.path.join(src, "participants.tsv"), newline="") as f:
         ids = [r["participant_id"] for r in csv.DictReader(f, delimiter="\t")]
-    ex_files = [os.path.join(src, n) for n in ("excluded.tsv", "duplicates.tsv", "ausgeschlossen.tsv")
-                if os.path.exists(os.path.join(src, n))] + list(exclude_tsv or [])
-    excluded = set().union(*[_ids_from_tsv(p) for p in ex_files]) if ex_files else set()
+    root = os.path.dirname(src)                         # dataset level (e.g. CHARITE/excluded.tsv with a modality column)
+    ex_files = [os.path.join(d, n) for d in (src, root) for n in ("excluded.tsv", "duplicates.tsv", "ausgeschlossen.tsv")
+                if os.path.exists(os.path.join(d, n))] + list(exclude_tsv or [])
+    excluded = set().union(*[_ids_from_tsv(p, modality) for p in ex_files]) if ex_files else set()
     log(f"{src}: {len(ids)} in participants.tsv, {len(excluded & set(ids))} of them excluded by "
-        f"{[os.path.basename(p) for p in ex_files] or 'no exclusion file'}; bias-corrected images from {biascorr_dir}")
+        f"{[os.path.relpath(p, root) for p in ex_files] or 'no exclusion file'}; bias-corrected images from {biascorr_dir}")
     rows, missing, quality = [], [], []
     for sid in ids:
         if sid in excluded:
@@ -176,7 +194,10 @@ def build_caselist(source: str, modality: str, biascorr_dir: Optional[str] = Non
     log(json.dumps({k: v for k, v in report.items() if k != "source"}))
     for sid, why in missing:
         log(f"  NOT included (missing input): {sid}: {why}")
-    for q in quality:
-        if q["mask_fit_flag"] or q["header_offset_flag"]:
-            log(f"  quality flag (report only): {q}")
+    flagged = [q for q in quality if q["mask_fit_flag"] or q["header_offset_flag"]]
+    for q in flagged:
+        log(f"  quality flag (report only): {q}")
+    if flagged:
+        log(f"WARNING: {len(flagged)} flagged case(s) are INCLUDED: {[q['id'] for q in flagged]}. Check them; to leave "
+            "one out, list it in excluded.tsv (modality folder or dataset level) or pass --exclude-tsv")
     return rows

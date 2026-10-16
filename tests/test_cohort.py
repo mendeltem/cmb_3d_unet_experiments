@@ -76,3 +76,12 @@ def test_assign_folds_matches_kohorte_bauen():
             want[j] = (start + i) % 5
         start += len(idx)
     assert folds == want
+
+
+def test_dataset_level_exclusion_with_modality_column(tmp_path):
+    src = _layout(tmp_path)
+    (src / "excluded.tsv").unlink()                               # e.g. a copy without the per-modality file
+    with open(src.parent / "excluded.tsv", "w") as f:             # CHARITE/excluded.tsv
+        f.write("modality\tparticipant_id\treason\nSWI\tsub-p000\tother modality\nT2*\tsub-p005\tbad mask\n")
+    ids = [r["id"] for r in build_caselist(str(src), "t2star", report_dir=str(tmp_path / "o"))]
+    assert "sub-p005" not in ids and "sub-p000" in ids and "sub-p007" in ids

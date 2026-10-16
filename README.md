@@ -78,11 +78,10 @@ Install once on the login node (`./install.sh`), then check a GPU node (~1 min, 
 ```bash
 mkdir -p logs && sbatch scripts/slurm_quick_test.sbatch && squeue --me      # result in logs/cmbx_quick_<job>.out
 ```
-A real run (one training needs ~1.8 GiB, so a GPU share is enough where the cluster offers `shard`):
+A real run (one training needs ~1.8 GiB, so a GPU share is enough where the cluster offers `shard`; resubmitting
+continues where it stopped):
 ```bash
-#!/bin/bash
-#SBATCH --job-name=cmbx --partition=gpu --gres=shard:1 --cpus-per-task=8 --mem=32G --time=04:00:00
-cd /path/to/cmb_3d_unet_experiments && source env.sh && cmbx run-experiment configs/catalina_t2star.yaml
+sbatch scripts/slurm_run_experiment.sbatch configs/catalina_swi.yaml            # [key=value ...] overrides
 ```
 Use the partition / GRES names of your cluster (`sinfo -o "%P %G"`); without shards use `--gres=gpu:1`.
 
