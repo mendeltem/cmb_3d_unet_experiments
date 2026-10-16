@@ -54,7 +54,7 @@ DEFAULTS: Dict[str, Any] = {
         "batch_size": 4,
         "lr": 3.0e-4,
         "weight_decay": 1.0e-4,                  # AdamW, cosine annealing over `epochs`
-        "loss": "bce_dice",                      # 0.5 BCE + 0.5 soft Dice (per patch, smooth 1)
+        "loss": "bce_dice",                      # bce_dice (0.5 BCE + 0.5 soft Dice) | bce | dice | focal_dice
         "lesion_fraction": 0.6,                  # patches containing a lesion voxel (random offset)
         "brain_fraction": 0.25,                  # patches centred on a random brain voxel; rest anywhere
         "flip_augment": True,                    # random flips per axis (the only augmentation)
@@ -125,6 +125,24 @@ def preprocess_signature(cfg: Dict) -> Dict:
     """The part of the config that determines the prepared volumes (written next to them, checked on reuse)."""
     pp = {k: v for k, v in cfg["preprocess"].items() if k != "workers"}
     return json.loads(json.dumps(pp))
+
+
+def same_preprocessing(old: Dict, new: Dict) -> bool:
+    """Signatures written by an older cmbx lack keys added later (e.g. extra_channels); a missing key means its default,
+    so a folder prepared before the key existed is still reused when nothing that matters differs."""
+    base = {k: v for k, v in DEFAULTS["preprocess"].items() if k != "workers"}
+    fill = lambda s: json.loads(json.dumps(_fill_defaults(base, s)))
+    return fill(old) == fill(new)
+
+
+def _fill_defaults(base: Dict, d: Dict) -> Dict:
+    out = copy.deepcopy(d)
+    for k, v in base.items():
+        if k not in out:
+            out[k] = copy.deepcopy(v)
+        elif isinstance(v, dict) and v and isinstance(out[k], dict):
+            out[k] = _fill_defaults(v, out[k])
+    return out
 
 
 def dump(cfg: Dict, path: str) -> None:

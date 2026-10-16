@@ -107,7 +107,8 @@ def cmd_compare(a):
 
 def cmd_predict(a):
     from .predict_cli import predict_run
-    predict_run(a.run, a.cases, a.out, a.threshold, a.min_size, a.device, a.csf_rule, _log, use_folds=a.folds)
+    predict_run(a.run, a.cases, a.out, a.threshold, a.min_size, a.device, a.csf_rule, _log, use_folds=a.folds,
+                image=a.image, brain_mask=a.brain_mask, tissue_map=a.tissue_map, case_id=a.id, native=not a.grid_only)
 
 
 def main(argv=None):
@@ -188,20 +189,34 @@ def main(argv=None):
     p.add_argument("root", nargs="?", default="runs")
     p.set_defaults(fn=cmd_compare)
 
-    p = sub.add_parser("predict", help="apply the final model of a run (or its 5 fold models) to new cases")
-    p.add_argument("--run", required=True)
-    p.add_argument("--cases", required=True, help="case list; cases must be prepared in the run's prepared_dir "
-                                                  "or in --prepared")
+    p = sub.add_parser("predict", help="apply a run's final model (or its fold models) to new scans",
+                       description="Masks are written on the input image grid (+ model-grid copies in <out>/grid). "
+                                   "The scans must be bias-corrected like the training data; they are prepared automatically.")
+    p.add_argument("--run", required=True, help="finished run folder (holds final/ and fold0/ ...)")
+    src = p.add_mutually_exclusive_group(required=True)
+    src.add_argument("--cases", help="case list: id, image [, brain_mask, tissue_map, extra channel columns]")
+    src.add_argument("--image", help="one scan (NIfTI) instead of a case list")
+    p.add_argument("--brain-mask", default=None, help="with --image: brain mask on the image matrix (default: image > 0)")
+    p.add_argument("--tissue-map", default=None, help="with --image: SynthSeg map, needed for --csf-rule")
+    p.add_argument("--id", default=None, help="with --image: case id for the output names (default: file name)")
     p.add_argument("--out", required=True)
     p.add_argument("--threshold", type=float, default=None, help="default: the cell chosen most often by the folds")
-    p.add_argument("--min-size", type=int, default=None)
-    p.add_argument("--device", default="auto")
-    p.add_argument("--csf-rule", action="store_true")
-    p.add_argument("--folds", action="store_true", help="use the 5 fold models instead of the final model")
+    p.add_argument("--min-size", type=int, default=None, help="minimum size in model-grid voxels (0.25 mm3 each)")
+    p.add_argument("--device", default="auto", help="auto | cuda | cpu | mps")
+    p.add_argument("--csf-rule", action="store_true", help="drop detections in CSF (needs tissue maps)")
+    p.add_argument("--folds", action="store_true", help="use the 5 fold models (mean probability) instead of the final model")
+    p.add_argument("--grid-only", action="store_true", help="skip the outputs on the input image grid")
     p.set_defaults(fn=cmd_predict)
 
     a = ap.parse_args(argv)
-    a.fn(a)
+    if os.environ.get("CMBX_DEBUG"):
+        return a.fn(a)
+    try:                         # user errors as one readable line; CMBX_DEBUG=1 shows the traceback
+        a.fn(a)
+    except (FileNotFoundError, NotADirectoryError, PermissionError) as e:
+        sys.exit(f"cmbx {a.cmd}: error: {e.strerror or e}: {e.filename}" if getattr(e, "filename", None) else f"cmbx {a.cmd}: error: {e}")
+    except (KeyError, ValueError) as e:
+        sys.exit(f"cmbx {a.cmd}: error: {e.args[0] if e.args else e}  (CMBX_DEBUG=1 for the traceback)")
 
 
 if __name__ == "__main__":

@@ -26,6 +26,9 @@ def ensure_prepared(cfg: Dict, workers: Optional[int] = None, overwrite: bool = 
     sig = C.preprocess_signature(cfg)
     if os.path.exists(sig_path):
         old = json.load(open(sig_path))
+        if old != sig and C.same_preprocessing(old, sig):
+            json.dump(sig, open(sig_path, "w"), indent=1)      # older signature without newer default keys: upgrade it
+            old = sig
         if old != sig and not overwrite:
             raise SystemExit(f"{out} was prepared with different preprocessing settings:\n  existing {old}\n"
                              f"  this config {sig}\nPoint data.prepared_dir to a new folder for this experiment.")
@@ -68,6 +71,22 @@ def check_config(cfg: Dict) -> None:
                          f"preprocess.extra_channels (available: {sorted(allowed)}); got {ch}")
     if "frst" in ch and not cfg["preprocess"]["frst"]:
         raise SystemExit("train.channels uses 'frst' but preprocess.frst is false")
+    from .model import MODELS
+    from .train import LOSSES
+    T = cfg["train"]
+    if T["loss"] not in LOSSES:
+        raise SystemExit(f"train.loss {T['loss']!r} unknown; available: {sorted(LOSSES)}")
+    if cfg["model"]["name"] not in MODELS:
+        raise SystemExit(f"model.name {cfg['model']['name']!r} unknown; available: {sorted(MODELS)}")
+    if len(T["patch_size"]) != 3 or any(int(v) < 8 for v in T["patch_size"]):
+        raise SystemExit(f"train.patch_size must be 3 sizes >= 8 voxels (z, y, x); got {T['patch_size']}")
+    if not (T["device"] in ("auto", "cpu", "mps") or str(T["device"]).startswith("cuda")):
+        raise SystemExit(f"train.device must be auto, cuda, cuda:N, cpu or mps; got {T['device']!r}")
+    for k in ("epochs", "n_patches", "batch_size", "eval_every"):
+        if int(T[k]) < 1:
+            raise SystemExit(f"train.{k} must be >= 1; got {T[k]}")
+    if int(T["min_epochs"]) > int(T["epochs"]):
+        raise SystemExit(f"train.min_epochs ({T['min_epochs']}) > train.epochs ({T['epochs']})")
     if int(cfg["data"]["n_folds"]) < 3:
         raise SystemExit("data.n_folds must be >= 3 (test fold + inner fold + training folds)")
 
@@ -98,4 +117,7 @@ def run_experiment(cfg: Dict, folds=None, workers: Optional[int] = None, log=pri
     if final and len(metas) == split["n_folds"]:      # the model to keep: trained on ALL cases (cmbx/final.py)
         from .final import train_final
         train_final(cfg, run_dir, log)
+    elif final:
+        log(f"final model not trained yet: it takes its cell from all {split['n_folds']} CV folds ({len(metas)} done); "
+            "run the remaining folds (same command without --folds) or `cmbx train-final <config>` now")
     return s

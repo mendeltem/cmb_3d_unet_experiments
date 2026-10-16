@@ -9,7 +9,7 @@ provenance of every default and the deviations from the original code. Short ver
 |---|---|
 | Input | 2 channels on a 0.5 x 0.5 x 1.0 mm grid, cropped to the brain: **inverted** T2*/SWI (`1 - I/max(I)` in the brain, microbleeds bright, 0 outside) and the **FRST** map (fast radial symmetry transform, Loy & Zelinsky 2003, radii 1-3 mm, per axial slice) |
 | Network | anisotropic 3D U-Net: level 0 convolves (1x3x3) and pools (1x2x2) in-plane only, levels 1-4 are isotropic; (Conv-InstanceNorm-LeakyReLU) x 2 per block, channels 32-64-128-256-512, 22.5 M parameters, one logit per voxel |
-| Training | patches 38 x 62 x 94 voxels (z, y, x) = 38 x 31 x 47 mm; 800 patches per epoch: 60 % around a reference lesion voxel (random position in the patch), 25 % around a random brain voxel, 15 % anywhere; random flips; loss 0.5 BCE + 0.5 soft Dice; AdamW lr 3e-4, weight decay 1e-4, cosine schedule; batch 4; 60 epochs; bfloat16 autocast on the GPU |
+| Training | patches 38 x 62 x 94 voxels (z, y, x) = 38 x 31 x 47 mm; 800 patches per epoch: 60 % around a reference lesion voxel (random position in the patch), 25 % around a random brain voxel, 15 % anywhere; random flips; loss 0.5 BCE + 0.5 soft Dice (`train.loss`, see Options); AdamW lr 3e-4, weight decay 1e-4, cosine schedule; batch 4; 60 epochs; bfloat16 autocast on the GPU |
 | Selection | **inner fold**: for test fold k, fold (k+1) % 5 is the inner fold and the other three are trained on. Every 5 epochs the inner-fold cases are predicted in full and the pooled lesion F1 is computed for every cell of threshold {0.3 ... 0.9} x minimum size {1, 2, 3, 5 voxels}; the best (epoch, threshold, minimum size) is kept. The test fold is touched only once, with that choice |
 | Prediction | sliding window of the patch size, half-window stride, overlaps averaged, windows outside the brain skipped |
 | Post-processing | threshold, 26-connected components, minimum size, clump guard (components > 2100 voxels = 525 mm3 are not microbleeds); optional CSF rule (component dropped if its majority SynthSeg label is CSF) |
@@ -186,7 +186,37 @@ are completed on the next `prepare` (cases missing the file are prepared again).
 ```
 `summary.json`: pooled F1 / precision / sensitivity, FP per case, per-case F1 mean and median, TP/FP/FN, per-fold F1,
 training hours, max VRAM. `per_case-*.csv` holds case ids: for in-house data it stays in the outputs folder.
-`cmbx predict --run <run> --cases new.csv --out <dir>` applies the five fold models (mean probability) to new cases.
+
+## Inference (`cmbx predict`)
+
+```bash
+cmbx predict --run <run> --image scan.nii.gz [--brain-mask mask.nii.gz] --out pred/      # one scan
+cmbx predict --run <run> --cases new.csv --out pred/                                     # id,image[,brain_mask,tissue_map]
+```
+The scans must be bias-corrected like the training data (no label needed); they are prepared with the run's own
+settings. Default model: the final model (`--folds`: mean probability of the 5 fold models); default cell: the one the
+folds chose most often (`--threshold`, `--min-size` to override); `--csf-rule` needs a SynthSeg map; `--device`
+auto | cuda | cpu | mps. Outputs: `<id>_mask.nii.gz` / `<id>_prob.nii.gz` on the **input image grid** (same matrix
+and affine; nearest neighbour in world coordinates, a microbleed smaller than one input voxel keeps its centre voxel,
+so the count matches the model grid), copies on the model grid in `grid/`, `<id>.json` with one entry per microbleed
+(volume mm3, max probability, centre in mm and as input voxel) and `predictions.csv`. Checked on 8 catalina T2* cases:
+every output on the input matrix/affine, detections on the reference lesions, equal counts on both grids.
+
+## Options (config keys, `--set key=value`)
+
+| key | values |
+|---|---|
+| `train.loss` | `bce_dice` (default, 0.5 BCE + 0.5 soft Dice), `bce`, `dice`, `focal_dice` (focal BCE gamma 2 + Dice) |
+| `train.channels` | `[image, frst]` (default), `[image]`, plus own channels from `preprocess.extra_channels` |
+| `train.use_last_epoch` | `false` (inner-fold best state) / `true` (last state) |
+| `train.amp_bf16`, `train.device` | bfloat16 autocast on CUDA; `auto` / `cuda` / `cuda:N` / `cpu` / `mps` |
+| `preprocess.inpaint.method` | `none`, `mean`, `biharmonic`, `package.module:function` |
+| `preprocess.reorient`, `brain_mask_mode`, `interpolation_order` | `none`/`ras`; `mask`/`mask_and_positive`; 1/3 |
+| `postprocess.csf_rule`, `predict.tta_flip` | CSF rule in CV and prediction; flip test-time augmentation |
+
+Every option above is run end to end (CV + final model + predict) by the option matrix on synthetic phantoms, and
+`tests/test_options.py` covers losses, config checks, predict outputs, the single-scan mode and readable errors.
+A wrong key or value stops with one line before anything runs (`CMBX_DEBUG=1` shows the traceback).
 
 ## Runtime and memory
 One 5-fold run of 60 epochs on one GPU (RTX A5000) took **1.6 h for VALDO** (57 cases, `a03-aniso-e60-gd`) and
@@ -256,8 +286,7 @@ The VALDO numbers come from a different dataset (public, 3 sites) and are not a 
   applied afterwards to the stored maps with a cross-fold cell choice -- that variant is `cmbx evaluate --mode
   crossfold --csf-rule`.
 * Not ported: the second-stage candidate classifier, ensembles over seeds, synthesis/augmentation variants and the
-  other tournament networks. `cmbx predict` writes outputs on the prepared grid (no back-projection to the native
-  grid; `mb_segment` of microbleed_detection_3D_UNET does that for inference).
+  other tournament networks.
 
 ## License and citation
 Code: MIT (`LICENSE`), as cmb-valdo-chain. Data and weights are not part of the repository; VALDO is CC BY-NC-SA 4.0

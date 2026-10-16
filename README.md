@@ -46,12 +46,16 @@ This reproduces the training cohorts and folds (T2* 75, SWI 61 cases). Other dat
 ```bash
 cmbx run-experiment configs/catalina_t2star.yaml     # prepare -> split -> 5-fold CV -> evaluation -> final model
 cmbx compare ../cmb_3d_unet_experiments_runs/catalina-t2star/runs   # all runs side by side -> summary.csv
-cmbx predict --run <run folder> --cases new.csv --out pred/          # apply the final model to new cases
+cmbx predict --run <run folder> --image scan.nii.gz --out pred/     # apply the final model to a new scan
+cmbx predict --run <run folder> --cases new.csv --out pred/          # ... or to a case list
 ```
 Per run: `summary.json` = the CV score (pooled lesion-level F1, precision, sensitivity, FP per case, per-case F1) and
 **`final/model.pt` = one model trained on all cases**, the model to keep and use (`--no-final` skips it;
 `cmbx train-final <config>` makes it later). Time on one GPU: CV ~2.3 h + final model ~0.5 h for 60 epochs.
 Reference (stage 1, seed 42): catalina T2* **0.665**, SWI **0.630**; seed noise is about +-0.03 F1.
+`predict` writes the masks on the **input image grid** (`<id>_mask.nii.gz`, `<id>_prob.nii.gz`), a list of the
+microbleeds per scan (`<id>.json`: volume, probability, position) and `predictions.csv`; options (`--folds`,
+`--threshold`, `--csf-rule`, losses, channels, inpainting, ...): docs/DETAILS.md.
 
 ## Experiments = config files
 

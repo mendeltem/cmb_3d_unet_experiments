@@ -34,8 +34,15 @@ from .predict import crop_patch, predict_volume
 
 
 def resolve_device(name: str) -> str:
+    """auto -> cuda if a GPU is visible (NVIDIA, or AMD through ROCm), else cpu. An explicit device is checked."""
     if name == "auto":
         return "cuda" if torch.cuda.is_available() else "cpu"
+    if name.startswith("cuda") and not torch.cuda.is_available():
+        raise SystemExit(f"device {name!r} requested but no CUDA/ROCm GPU is visible (use --device cpu or auto)")
+    if name.startswith("cuda:") and int(name.split(":")[1]) >= torch.cuda.device_count():
+        raise SystemExit(f"device {name!r} requested but only {torch.cuda.device_count()} GPU(s) visible (cuda:0 ...)")
+    if name == "mps" and not (getattr(torch.backends, "mps", None) and torch.backends.mps.is_available()):
+        raise SystemExit("device 'mps' requested but Apple MPS is not available")
     return name
 
 
@@ -113,7 +120,25 @@ def loss_bce_dice(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     return 0.5 * bce + 0.5 * dice.mean()
 
 
-LOSSES = {"bce_dice": loss_bce_dice}
+def loss_bce(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """Plain binary cross-entropy (voxel mean)."""
+    return F.binary_cross_entropy_with_logits(logits, target)
+
+
+def loss_dice(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """1 - soft Dice per patch (smoothing 1), mean over the batch."""
+    pf, tf = torch.sigmoid(logits).flatten(1), target.flatten(1)
+    return (1 - (2 * (pf * tf).sum(1) + 1.0) / (pf.sum(1) + tf.sum(1) + 1.0)).mean()
+
+
+def loss_focal_dice(logits: torch.Tensor, target: torch.Tensor, gamma: float = 2.0) -> torch.Tensor:
+    """0.5 * focal BCE (gamma 2, Lin et al. 2017) + 0.5 * soft Dice: down-weights the many easy background voxels."""
+    bce = F.binary_cross_entropy_with_logits(logits, target, reduction="none")
+    pt = torch.exp(-bce)
+    return 0.5 * ((1 - pt) ** gamma * bce).mean() + 0.5 * loss_dice(logits, target)
+
+
+LOSSES = {"bce_dice": loss_bce_dice, "bce": loss_bce, "dice": loss_dice, "focal_dice": loss_focal_dice}
 
 
 # ---------------------------------------------------------------- one fold
