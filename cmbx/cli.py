@@ -1,7 +1,7 @@
 """Command line: ``cmbx <command> ...`` (or ``python -m cmbx ...``).
 
   cmbx make-phantoms data/phantoms --n 10              synthetic cases + case list, to try everything without data
-  cmbx make-caselist --source <BIDS_T2_STAR> --modality t2star --out <csv>   case list for the in-house layout
+  cmbx make-caselist --image "<dir>/{id}/..." --label ... --out <csv>    case list from any layout (patterns)
   cmbx check-env                                       torch/CUDA etc.: what is there, what is missing
   cmbx prepare --config configs/baseline.yaml          native images -> 0.5 x 0.5 x 1 mm grid + FRST (+ tissue map)
   cmbx split --config configs/baseline.yaml            stratified fold assignment -> data/splits.json
@@ -37,10 +37,10 @@ def cmd_make_phantoms(a):
 
 
 def cmd_make_caselist(a):
-    from .cohort import build_caselist
+    from .caselist import build_caselist
     from .data import write_caselist
-    rows = build_caselist(a.source, a.modality, a.biascorr_dir, a.brainmask_dir, a.exclude_tsv, a.tissue_pattern,
-                          not a.no_quality_checks, os.path.dirname(os.path.abspath(a.out)), _log)
+    rows = build_caselist(a.image, a.label, a.brain_mask, a.tissue_map, a.raw, a.ids, a.exclude, a.n_folds, a.fold_seed,
+                          not a.no_folds, not a.no_quality_checks, os.path.dirname(os.path.abspath(a.out)), _log)
     if a.no_folds:
         for r in rows:
             r["fold"] = ""
@@ -125,15 +125,18 @@ def main(argv=None):
     p.add_argument("--seed", type=int, default=0)
     p.set_defaults(fn=cmd_make_phantoms)
 
-    p = sub.add_parser("make-caselist", help="case list from the in-house dataset layout (see cmbx/cohort.py)")
-    p.add_argument("--source", required=True, help="e.g. .../DATA/CHARITE/BIDS_T2_STAR (read only)")
-    p.add_argument("--modality", choices=["t2star", "swi"], required=True)
+    p = sub.add_parser("make-caselist", help="case list from any folder layout, given as path patterns with {id}",
+                       description="Each pattern is a path with {id} and optional * wildcards; the first match is used.")
+    p.add_argument("--image", required=True, help="bias-corrected image pattern, e.g. /data/{id}/anat/{id}*_T2starw.nii.gz")
+    p.add_argument("--label", default=None, help="reference CMB mask pattern (needed for training, not for predict)")
+    p.add_argument("--brain-mask", action="append", default=[], help="brain mask pattern; repeat for fallbacks (first match wins)")
+    p.add_argument("--tissue-map", default=None, help="SynthSeg map pattern (for the CSF rule)")
+    p.add_argument("--raw", default=None, help="raw image pattern for the quality checks (default: the --image)")
+    p.add_argument("--ids", default=None, help="file with the case ids (one per line, or an id / participant_id column)")
+    p.add_argument("--exclude", action="append", default=[], help="file with ids to leave out (same formats); repeatable")
     p.add_argument("--out", required=True, help="case list CSV; reports are written next to it (keep it OUTSIDE the repo)")
-    p.add_argument("--biascorr-dir", default=None,
-                   help="bias-corrected images, <dir>/sub-X/anat/*desc-biascorr*; default <source>/../derivatives/biascorr/<modality>")
-    p.add_argument("--brainmask-dir", default=None, help="brain masks for cases without one in the source")
-    p.add_argument("--exclude-tsv", nargs="*", default=[], help="extra exclusion lists (participant_id column)")
-    p.add_argument("--tissue-pattern", default=None, help="SynthSeg path with {id}, for the CSF rule")
+    p.add_argument("--n-folds", type=int, default=5)
+    p.add_argument("--fold-seed", type=int, default=0)
     p.add_argument("--no-quality-checks", action="store_true", help="skip the mask-fit / header-offset report")
     p.add_argument("--no-folds", action="store_true", help="leave folds empty (cmbx split computes them)")
     p.set_defaults(fn=cmd_make_caselist)

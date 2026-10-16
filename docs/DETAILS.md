@@ -23,10 +23,10 @@ cmb-valdo-chain; see [Provenance of every default](#provenance-of-every-default)
 **Brain extraction and bias-field correction are deliberately not part of this repository.** They are done once,
 uniformly, on the data, and every experiment starts from the same corrected inputs. Per case `cmbx` expects:
 
-| input | how it was made for our data |
+| input | how it can be made |
 |---|---|
-| bias-corrected T2*/SWI image | FSL FAST `fast -B --nopve -t 2` on the brain-extracted image (in-house: `catalina/hirn_und_bias.py` of cmb-valdo-chain; VALDO: `code/preprocess.py`, `fast -t 2 -n 3 -B -b --nopve` on the skull-stripped T2S) |
-| brain mask, same matrix | in-house: scanner mask, HD-BET where it was missing; VALDO: `image > 0` with holes filled (VALDO is skull-stripped; leave `brain_mask` empty) |
+| bias-corrected T2*/SWI image | e.g. FSL FAST `fast -B --nopve -t 2` on the brain-extracted image (VALDO: `fast -t 2 -n 3 -B -b --nopve` on the skull-stripped T2S) |
+| brain mask, same matrix | a scanner mask or HD-BET; for skull-stripped data such as VALDO leave `brain_mask` empty (`image > 0`, holes filled) |
 | reference CMB mask, same matrix | manual masks (labels are optional for `cmbx predict`) |
 | optional SynthSeg map | `mri_synthseg --robust` on the T2*/SWI image (CSF rule only) |
 
@@ -61,30 +61,30 @@ first. No FSL, HD-BET or FreeSurfer is needed.
 
 ## Your data
 
-### In-house cohorts (catalina T2* / SWI)
-Layout on the group drive (`ALITA/DATA/CHARITE`, read only):
-```
-BIDS_T2_STAR/participants.tsv                     the cohort (75 sub-tXXX; old-name duplicates are not listed)
-BIDS_T2_STAR/sub-X/t2/sub-X_T2.nii.gz             raw image (quality checks only)
-BIDS_T2_STAR/sub-X/t2/sub-X_T2_roi.nii.gz         reference CMB mask
-BIDS_T2_STAR/sub-X/t2/sub-X_T2_brainmask.nii.gz   brain mask
-BIDS_T2_STAR/excluded.tsv, duplicates.tsv         left out (participant_id column)
-derivatives/biascorr/t2star/sub-X/anat/sub-X_T2starw_desc-biascorr_T2starw.nii.gz          bias-corrected image
-derivatives/biascorr/swi/sub-X/anat/sub-X_acq-swi_T2starw_desc-biascorr_T2starw.nii.gz     (SWI; BIDS_SWI/sub-X/swi/sub-X_SWI*.nii.gz)
-```
+### Case list from your folder layout (`cmbx make-caselist`)
+Nothing about a dataset is built in: the layout is given as path patterns with `{id}` (glob `*` allowed; the first
+match is used), the ids and exclusions as files you pass.
 ```bash
-cmbx make-caselist --source /path/to/DATA/CHARITE/BIDS_T2_STAR --modality t2star \
-    --out ../cmb_3d_unet_experiments_runs/catalina-t2star/cases.csv
+cmbx make-caselist --image "<root>/derivatives/biascorr/{id}/anat/{id}*_desc-biascorr*.nii.gz" \
+    --label "<root>/{id}/anat/{id}_cmb_mask.nii.gz" \
+    --brain-mask "<root>/{id}/anat/{id}_brainmask.nii.gz" --brain-mask "<other masks>/{id}*brain*mask*.nii.gz" \
+    [--tissue-map "<synthseg>/{id}_synthseg.nii.gz"] [--raw "<root>/{id}/anat/{id}_T2starw.nii.gz"] \
+    [--ids ids.tsv] [--exclude leave_out.txt ...] --out ../my_runs/cases.csv
 ```
-`--biascorr-dir` defaults to `<source>/../derivatives/biascorr/<modality>`; `--brainmask-dir` supplies masks missing in
-the source; `--exclude-tsv` adds exclusion lists; `--tissue-pattern ".../{id}_synthseg.nii.gz"` adds SynthSeg maps.
-The builder reproduces the cohort and the folds of `catalina/kohorte_bauen.py` (cmb-valdo-chain): cases from
-`participants.tsv` minus the exclusion files; lesion count = 26-connected components of the reference; classes
-0 / 1-2 / 3-5 / >5; `numpy.random.default_rng(0)` round-robin folds. A case whose reference, brain mask or
-bias-corrected image is missing is **not silently dropped**: it is listed with the reason (`missing.tsv`, screen).
-Two data-quality checks are **reported only** (`quality.tsv`): mask fit (mean intensity in the reference / ring around
-it > 0.9, the rule behind the one excluded SWI case) and a reference-mask header offset > 0.25 voxel. Reports
-(`cohort.tsv`, `missing.tsv`, `quality.tsv`, `cohort_report.json`) are written next to `--out`.
+* ids: `--ids` (one id per line, or a CSV/TSV with an `id` / `participant_id` column; its order is kept), otherwise
+  every id the `--image` pattern matches; `--exclude` files (same formats) leave cases out; `--brain-mask` can be
+  repeated as fallbacks (the column `brain_mask_from` in the report says which one matched).
+* A case whose image, reference or brain mask is missing is **not silently dropped**: it is listed with the reason
+  (`missing.tsv`, screen).
+* Two data-quality checks are **reported only** (`quality.tsv`, a WARNING lists flagged cases that stay in), on
+  `--raw` if given, else on `--image`: mask fit (mean intensity in the reference / ring around it > 0.9, i.e. the
+  reference is not darker than its surroundings) and a reference-mask header offset > 0.25 voxel.
+* Folds: lesion count = 26-connected components of the reference; classes 0 / 1-2 / 3-5 / >5;
+  `numpy.random.default_rng(--fold-seed)` shuffle per class, round-robin over `--n-folds` with the counter running on
+  across classes (the same ids in the same order always give the same folds). `--no-folds` leaves them to `cmbx split`.
+* Reports next to `--out`: `caselist.tsv`, `missing.tsv`, `quality.tsv`, `caselist_report.json`.
+* Dataset-specific rules (which file lists the exclusions, which mask comes first) belong in a small script kept
+  with the data, outside this repository.
 
 ### Any other data: a case list
 CSV (or JSON list) with the columns
@@ -111,9 +111,9 @@ Without a `fold` column, `cmbx split` writes a deterministic stratified split (g
 ## Run a 5-fold cross-validation
 
 ```bash
-cmbx run-experiment configs/catalina_t2star.yaml          # prepare (once) -> split -> 5 folds -> evaluation -> summary
-cmbx run-experiment configs/catalina_t2star.yaml --folds 0 1   # a subset of folds; rerun later to complete (resumable)
-cmbx run-experiment configs/catalina_t2star.yaml --set name=quick train.epochs=4 train.min_epochs=4 train.eval_every=2
+cmbx run-experiment ../my_runs/my_baseline.yaml          # prepare (once) -> split -> 5 folds -> evaluation -> summary
+cmbx run-experiment ../my_runs/my_baseline.yaml --folds 0 1   # a subset of folds; rerun later to complete (resumable)
+cmbx run-experiment ../my_runs/my_baseline.yaml --set name=quick train.epochs=4 train.min_epochs=4 train.eval_every=2
 ```
 Steps one by one: `cmbx prepare --config X`, `cmbx split --config X`, `cmbx cv --config X`.
 Finished folds (`meta.json: ok`) are skipped; an interrupted fold is moved aside and restarted. A run folder refuses a
@@ -121,8 +121,8 @@ changed config: give the experiment a new `name`.
 
 ### Preprocessing (`cmbx prepare`)
 Per case, into `<prepared_dir>/<id>/<id>_{image,frst,label[,tissue]}.nii.gz` + `info.json`:
-orientation kept (`reorient: none`, VALDO) or RAS (`ras`, in-house) -> brain mask (`brain_mask_mode: mask` or, as for
-the in-house grids, `mask_and_positive`) -> **inpaint hook** (off) -> inversion -> resampling to 0.5 x 0.5 x 1.0 mm with the centre of the field of
+orientation kept (`reorient: none`, e.g. VALDO) or RAS (`ras`) -> brain mask (`brain_mask_mode: mask`, or
+`mask_and_positive` = mask & image > 0) -> **inpaint hook** (off) -> inversion -> resampling to 0.5 x 0.5 x 1.0 mm with the centre of the field of
 view fixed (linear, edge slices held; label nearest neighbour with rescue of components nearest sampling would drop)
 -> crop to the brain + 8 voxels -> FRST -> tissue map by nearest neighbour. Prepared volumes are shared by all
 experiments with the same preprocessing; `<prepared_dir>/preprocess.json` records the settings and a config with
@@ -134,16 +134,15 @@ A config lists only what differs from the defaults (`cmbx/config.py`, = the winn
 
 | config | what it tests |
 |---|---|
-| `configs/catalina_t2star.yaml`, `catalina_swi.yaml` | the baseline on the in-house cohorts (outputs outside the repo) |
-| `configs/baseline.yaml` | the baseline for a generic case list in `data/` (e.g. VALDO) |
+| `configs/baseline.yaml` | the winning recipe for a case list in `data/` (e.g. VALDO); copy it for your data |
 | `configs/no_frst.yaml` | image channel only (`train.channels: [image]`), same prepared data |
 | `configs/csf_rule.yaml` | SynthSeg CSF rule inside the CV (inner selection and test fold) |
 | `configs/inpaint_example.yaml` | paint over `inpaint_mask` before inversion (mean fill), own `prepared_dir` |
 | `configs/smoke_cpu.yaml` | tiny CPU run on phantoms (checks the plumbing; numbers mean nothing) |
 
-To make your own: copy one, change `name` and the keys you want to vary, run `cmbx run-experiment your.yaml`.
-For the in-house cohorts, start from `catalina_*.yaml` and set `name` (plus `data.prepared_dir` if preprocessing
-changes) so the outputs stay outside the repository.
+To make your own: copy one OUTSIDE the repository (e.g. `../my_runs/`), set `name`, the `data` paths and
+`output_root` (plus `data.prepared_dir` if preprocessing changes) and the keys you want to vary, then
+`cmbx run-experiment ../my_runs/your.yaml`. Paths in a config are relative to the folder you run cmbx from.
 
 **Pre-processing hook (inpainting).** `cmbx.preprocess.inpaint(image, mask, brain, method=..., **options)` is called on
 the (bias-corrected) native image before the inversion. Built in: `mean` (each masked component gets the mean of a
@@ -185,7 +184,7 @@ are completed on the next `prepare` (cases missing the file are prepared again).
 <output_root>/summary.csv          all runs side by side
 ```
 `summary.json`: pooled F1 / precision / sensitivity, FP per case, per-case F1 mean and median, TP/FP/FN, per-fold F1,
-training hours, max VRAM. `per_case-*.csv` holds case ids: for in-house data it stays in the outputs folder.
+training hours, max VRAM. `per_case-*.csv` holds case ids: keep run folders of patient data outside the repository.
 
 ## Inference (`cmbx predict`)
 
@@ -199,7 +198,7 @@ folds chose most often (`--threshold`, `--min-size` to override); `--csf-rule` n
 auto | cuda | cpu | mps. Outputs: `<id>_mask.nii.gz` / `<id>_prob.nii.gz` on the **input image grid** (same matrix
 and affine; nearest neighbour in world coordinates, a microbleed smaller than one input voxel keeps its centre voxel,
 so the count matches the model grid), copies on the model grid in `grid/`, `<id>.json` with one entry per microbleed
-(volume mm3, max probability, centre in mm and as input voxel) and `predictions.csv`. Checked on 8 catalina T2* cases:
+(volume mm3, max probability, centre in mm and as input voxel) and `predictions.csv`. Checked on 8 cases of an in-house T2* cohort:
 every output on the input matrix/affine, detections on the reference lesions, equal counts on both grids.
 
 ## Options (config keys, `--set key=value`)
@@ -220,7 +219,7 @@ A wrong key or value stops with one line before anything runs (`CMBX_DEBUG=1` sh
 
 ## Runtime and memory
 One 5-fold run of 60 epochs on one GPU (RTX A5000) took **1.6 h for VALDO** (57 cases, `a03-aniso-e60-gd`) and
-**1.7 h / 1.6 h for catalina T2* / SWI** (cmb-valdo-chain runs); peak VRAM 1.6-1.9 GiB per training (batch 4,
+**1.7 h / 1.6 h for in-house T2* (75 cases) / SWI (61 cases) cohorts** (cmb-valdo-chain runs); peak VRAM 1.6-1.9 GiB per training (batch 4,
 bfloat16; also measured with this package). Host RAM: all CV cases are held in memory (~130 MB per case) plus the
 patch buffer (~2 GB at 800 patches): measured peak 11.5 GB for the 61 SWI cases; about 15 GB expected for the 75 T2*
 cases (17.5 GB was measured before the duplicate patch buffer was removed). `cmbx prepare`: 5-20 s per case. CPU training is possible but impractically slow (use it
@@ -231,8 +230,8 @@ Stage 1 only (this U-Net, inner-fold selection, no second-stage classifier), les
 
 | cohort | this recipe, seed 42 | other |
 |---|---|---|
-| catalina T2* (75 cases, 828 lesions) | **0.665** (TP 523, FP 221, FN 305) | + CSF rule 0.675; with the shared second-stage classifier 0.671 |
-| catalina SWI (61 cases, 652 lesions) | **0.630** (seed 1: 0.602) | with the shared second-stage classifier 0.672 |
+| in-house T2*-GRE (75 cases, 828 lesions) | **0.665** (TP 523, FP 221, FN 305) | + CSF rule 0.675; with the shared second-stage classifier 0.671 |
+| in-house SWI (61 cases, 652 lesions) | **0.630** (seed 1: 0.602) | with the shared second-stage classifier 0.672 |
 | VALDO Task 2 (57 CV cases) | **0.588** (mean over seeds 0.605 +- 0.034) | two-seed ensemble + CSF rule 0.647; MicrobleedNet re-implementation 0.245 |
 
 Seed noise between runs is about +-0.03-0.08 F1, so compare variants with the same seed and, better, several seeds.
@@ -240,22 +239,21 @@ The VALDO numbers come from a different dataset (public, 3 sites) and are not a 
 
 ## Validation of this port (15 Oct 2026, on the machine the original ran on)
 * `pytest`: all tests pass in a fresh conda env made from `environment.yml`.
-* **Cohort.** `cmbx make-caselist` on the source layout (`sourcedata/catalina/BIDS_*` + the local `biascorr` /
-  `brainmask` derivatives + the exclusion list) yields exactly the training cohorts of cmb-valdo-chain: 75 T2* and 61
-  SWI cases, identical case ids, lesion counts and folds, and byte-identical image / reference / brain-mask files.
-* **Preprocessing.** `cmbx prepare` on these case lists reproduces the private grids of cmb-valdo-chain
-  (`mb-arena/gitter/{t2star,swi}`) **bit for bit** for all 75 T2* and 61 SWI cases (image, FRST, label; 828 / 652
-  lesion components; affines within 8e-6 mm). VALDO, from the FAST-corrected input of `dev/preproc` (3 cases, one per
-  site): `dev/gitter_d` reproduced to float precision (max |difference| 6e-7 image, 1.5e-7 FRST; labels identical).
-  Scripts: `scripts/compare_prepared_grids.py`, `scripts/check_preprocessing_regression.py`.
+* **Case lists.** `cmbx make-caselist` with path patterns and an exclusion file yields exactly the training cohorts
+  of cmb-valdo-chain: 75 T2* and 61 SWI cases, identical case ids, lesion counts, folds and input files (checked row
+  by row against the original cohort script and against the earlier, layout-specific builder).
+* **Preprocessing.** `cmbx prepare` on these case lists reproduces the original training grids **bit for bit** for
+  all 75 T2* and 61 SWI cases (image, FRST, label; 828 / 652 lesion components; affines within 8e-6 mm). VALDO, from
+  the FAST-corrected input (3 cases, one per site): reproduced to float precision (max |difference| 6e-7 image,
+  1.5e-7 FRST; labels identical). Scripts: `scripts/compare_prepared_grids.py`, `scripts/check_preprocessing_regression.py`.
 * **Model numerics.** Research checkpoints (`modell.pt`) load into `cmbx.model` and reproduce the stored test-fold
-  probability maps exactly (0 of ~14 M voxels differ, GPU bfloat16) for the fold-0 models of VALDO, catalina T2* and
-  catalina SWI (`scripts/check_model_numerics.py`).
+  probability maps exactly (0 of ~14 M voxels differ, GPU bfloat16) for the fold-0 models of VALDO and of the two
+  in-house cohorts (`scripts/check_model_numerics.py`).
 * **Training path.** Against the original `cv5.py` / `netze.py` imported read-only: identical sampled patches and
   shuffle for the same seed, identical initial weights, identical loss and weights after AdamW steps
   (`scripts/check_training_equivalence.py`).
-* **GPU path.** Short 5-fold CVs (4 epochs, inner evaluation every 2) ran end to end on the GPU for catalina T2* and
-  SWI (numbers in the hand-over notes; the outputs stay outside the repository). These are plumbing checks, not
+* **GPU path.** Short 5-fold CVs (4 epochs, inner evaluation every 2) ran end to end on the GPU for both in-house
+  cohorts (the outputs stay outside the repository). These are plumbing checks, not
   results: the reference numbers above need the full 60 epochs.
 
 ## Provenance of every default
@@ -267,21 +265,21 @@ The VALDO numbers come from a different dataset (public, 3 sites) and are not a 
 | patches, batch, lr, weight decay, shares, flips | 800, 4, 3e-4, 1e-4, 0.6 / 0.25, on | `cv5.REZEPT` |
 | patch, edge offset, clump guard, grids, fallback | (38, 62, 94), 4, 2100, 7 x 4 cells, (0.5, 1) | `cv5.py` constants |
 | seed | 42 + fold | `cv5.SEED`, `turnier.py --seed` |
-| grid | 0.5 x 0.5 x 1.0 mm, no vessel inpainting | `--gitter dev/gitter_d` = `gitter_c_bauen.py` on `dev/preproc_roh` |
-| in-house grids | RAS, FAST-corrected input, brain = mask & image > 0 | `cmb/transfer/build_private_grids.py` |
-| in-house cohort + folds | participants.tsv minus exclusions, classes 0/1-2/3-5/>5, default_rng(0) round-robin | `catalina/kohorte_bauen.py` |
+| grid | 0.5 x 0.5 x 1.0 mm, no vessel inpainting | the grid builder of the original chain |
+| clinical-data grid variant | `reorient: ras`, `brain_mask_mode: mask_and_positive` | the original grids of the in-house cohorts |
+| case-list folds | classes 0/1-2/3-5/>5, default_rng(0) round-robin | the original cohort script |
 
 ## Deviations from the original code (all deliberate, all small)
 * The inversion sets brain voxels that come out exactly 0 (the maximum voxel) to 1e-6 instead of 0 (background);
   this keeps "non-zero = brain" true. On VALDO this touches single voxels (see the regression numbers).
 * The README of cmb-valdo-chain mentions "deep supervision on the decoder"; the winner network has none (its loss
   `bce_dice_ds` reduces to plain BCE + Dice). This port has none either, i.e. it matches the code.
-* The generic split adds the fold size as a balancing key (the original produced folds of 11-13 cases). The in-house
-  folds are reproduced exactly (`cmbx make-caselist`).
-* Brain extraction and bias correction were part of the original scripts (`hirn_und_bias.py`, `preprocess.py`) and
-  are not part of this package (by design). The mask-fit exclusion and the mask-header rewrite of `kohorte_bauen.py`
-  became report-only checks; exclusions now come from the exclusion lists. `cmbx prepare` takes the reference mask
-  array on the image matrix, which is what the header rewrite achieved.
+* The generic split (`cmbx split`) adds the fold size as a balancing key (the original produced folds of 11-13
+  cases); the folds of the original cohort script are reproduced by `cmbx make-caselist`.
+* Brain extraction and bias correction were part of the original scripts and are not part of this package (by
+  design). The mask-fit exclusion and the mask-header rewrite of the original cohort script became report-only checks;
+  exclusions are passed as files (`--exclude`). `cmbx prepare` takes the reference mask array on the image matrix,
+  which is what the header rewrite achieved.
 * The CSF rule in the CV (`csf_rule: true`) acts on the inner selection and the test fold; in cmb-valdo-chain it was
   applied afterwards to the stored maps with a cross-fold cell choice -- that variant is `cmbx evaluate --mode
   crossfold --csf-rule`.

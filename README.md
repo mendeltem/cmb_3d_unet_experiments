@@ -2,11 +2,12 @@
 
 5-fold cross-validation of our best cerebral-microbleed (CMB) detector (anisotropic 3D U-Net `a03-aniso` from
 [cmb-valdo-chain](https://github.com/mendeltem/cmb-valdo-chain)) on **your own data**, and a framework to test
-**pre- and post-processing variants**, one YAML file per experiment. Package: `cmbx`. Primary target: the in-house
-Charité T2*-GRE and SWI cohorts; VALDO 2021 Task 2 works as a public example. Details: [docs/DETAILS.md](docs/DETAILS.md).
+**pre- and post-processing variants**, one YAML file per experiment. Package: `cmbx`. Works on any T2*-GRE or SWI
+dataset with reference CMB masks (nothing dataset-specific is built in); VALDO 2021 Task 2 is a public example.
+Details: [docs/DETAILS.md](docs/DETAILS.md).
 
 > **Patient data never go into this repository** (no images, masks, case lists with paths, predictions, weights,
-> per-case tables). The in-house configs write everything to `../cmb_3d_unet_experiments_runs/`, outside the repo.
+> per-case tables). Keep case lists, configs for your data and all outputs outside the repo, e.g. in `../my_runs/`.
 
 ## Install
 
@@ -32,27 +33,30 @@ training needs a GPU with >= 2 GB memory (one training: ~1.8 GiB) and >= 32 GB R
 
 Brain extraction and bias-field correction are **not** part of this repository: they are done once, uniformly, on
 the data. Per case `cmbx` needs a bias-corrected T2*/SWI image, a brain mask and the reference CMB mask (same matrix).
-The prepared in-house data are on the group drive (`ALITA/DATA/CHARITE`, see its `README.txt`):
+The case list is a CSV (`id`, `image`, `label`, `brain_mask`; optional `tissue_map`, `fold`, own columns). Build it
+from any folder layout with path patterns (`{id}` = case id, `*` allowed):
 
 ```bash
-cmbx make-caselist --source /path/to/DATA/CHARITE/BIDS_T2_STAR --modality t2star \
-    --out ../cmb_3d_unet_experiments_runs/catalina-t2star/cases.csv          # swi: BIDS_SWI, --modality swi
+cmbx make-caselist --image "/data/{id}/anat/{id}_desc-biascorr_T2starw.nii.gz" \
+    --label "/data/{id}/anat/{id}_cmb_mask.nii.gz" --brain-mask "/data/{id}/anat/{id}_brainmask.nii.gz" \
+    [--ids ids.tsv] [--exclude leave_out.txt] --out ../my_runs/cases.csv
 ```
-This reproduces the training cohorts and folds (T2* 75, SWI 61 cases). Other data: a CSV with the columns `id`,
-`image` (bias-corrected), `label`, `brain_mask` (optional: `tissue_map`, `fold`, own columns); see DETAILS.
+It reports cases with missing inputs and suspicious reference masks, and assigns stratified folds (details: DETAILS).
 
 ## Run
 
 ```bash
-cmbx run-experiment configs/catalina_t2star.yaml     # prepare -> split -> 5-fold CV -> evaluation -> final model
-cmbx compare ../cmb_3d_unet_experiments_runs/catalina-t2star/runs   # all runs side by side -> summary.csv
+cp configs/baseline.yaml ../my_runs/my_baseline.yaml   # set name, data.cases / prepared_dir / splits, output_root
+cmbx run-experiment ../my_runs/my_baseline.yaml       # prepare -> split -> 5-fold CV -> evaluation -> final model
+cmbx compare ../my_runs/runs                          # all runs side by side -> summary.csv
 cmbx predict --run <run folder> --image scan.nii.gz --out pred/     # apply the final model to a new scan
 cmbx predict --run <run folder> --cases new.csv --out pred/          # ... or to a case list
 ```
 Per run: `summary.json` = the CV score (pooled lesion-level F1, precision, sensitivity, FP per case, per-case F1) and
 **`final/model.pt` = one model trained on all cases**, the model to keep and use (`--no-final` skips it;
 `cmbx train-final <config>` makes it later). Time on one GPU: CV ~2.3 h + final model ~0.5 h for 60 epochs.
-Reference (stage 1, seed 42): catalina T2* **0.665**, SWI **0.630**; seed noise is about +-0.03 F1.
+Validated on two in-house cohorts (T2*-GRE 75 cases, SWI 61 cases): reference pooled F1 **0.665** / **0.630**
+(seed noise about +-0.03); this package reproduced 0.644 on the T2* cohort.
 `predict` writes the masks on the **input image grid** (`<id>_mask.nii.gz`, `<id>_prob.nii.gz`), a list of the
 microbleeds per scan (`<id>.json`: volume, probability, position) and `predictions.csv`; options (`--folds`,
 `--threshold`, `--csf-rule`, losses, channels, inpainting, ...): docs/DETAILS.md.
@@ -64,7 +68,7 @@ you want to vary, then `cmbx run-experiment your.yaml`.
 
 | config | tests |
 |---|---|
-| `catalina_t2star.yaml`, `catalina_swi.yaml` | baseline on the in-house cohorts |
+| `baseline.yaml` | the winning recipe; copy it for your data (set the `data` paths and `output_root`) |
 | `no_frst.yaml` | without the FRST channel (`train.channels: [image]`) |
 | `extra_channel_example.yaml` | an **own extra input channel** (e.g. vesselness, FLAIR): `preprocess.extra_channels: {name: column}`, then `train.channels: [image, frst, name]` or `[image, name]` |
 | `csf_rule.yaml` | drop candidates in CSF (needs a SynthSeg map per case) |
@@ -81,7 +85,7 @@ mkdir -p logs && sbatch scripts/slurm_quick_test.sbatch && squeue --me      # re
 A real run (one training needs ~1.8 GiB, so a GPU share is enough where the cluster offers `shard`; resubmitting
 continues where it stopped):
 ```bash
-sbatch scripts/slurm_run_experiment.sbatch configs/catalina_swi.yaml            # [key=value ...] overrides
+sbatch scripts/slurm_run_experiment.sbatch ../my_runs/my_baseline.yaml         # [key=value ...] overrides
 ```
 Use the partition / GRES names of your cluster (`sinfo -o "%P %G"`); without shards use `--gres=gpu:1`.
 

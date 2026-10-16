@@ -27,7 +27,7 @@ DEFAULTS: Dict[str, Any] = {
     },
     "preprocess": {
         "reorient": "none",                      # none = keep the axis order of the file (as in training) | ras
-        "brain_mask_mode": "mask",               # mask (VALDO grid) | mask_and_positive (in-house grids)
+        "brain_mask_mode": "mask",               # mask | mask_and_positive (brain &= image > 0)
         "spacing": [0.5, 0.5, 1.0],              # mm, (x, y, z) of the array; z = slice axis
         "margin": 8,                             # voxels around the brain bounding box
         "interpolation_order": 1,                # image resampling order (label: nearest + rescue)

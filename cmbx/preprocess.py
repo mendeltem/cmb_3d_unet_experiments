@@ -1,14 +1,14 @@
-"""From the BIAS-CORRECTED native T2*/SWI volume + brain mask to the training grid (port of cmb-valdo-chain
-``code/preproc_roh_bauen.py``, ``code/gitter_c_bauen.py`` and ``cmb/transfer/build_private_grids.py``).
+"""From the BIAS-CORRECTED native T2*/SWI volume + brain mask to the training grid (port of the
+preprocessing of cmb-valdo-chain).
 
 Brain extraction and bias-field correction are deliberately NOT part of this package: they are done once, uniformly,
-on the data (in our data: HD-BET or the scanner mask, then FSL ``fast -B`` on the brain-extracted image). The case
+on the data (e.g. HD-BET or a scanner mask, then FSL ``fast -B`` on the brain-extracted image). The case
 list points ``image`` at the bias-corrected volume.
 
-  1. orientation: kept as in the file (``reorient: none``, VALDO grid) or ``as_closest_canonical`` (``ras``, in-house);
+  1. orientation: kept as in the file (``reorient: none``, VALDO grid) or ``as_closest_canonical`` (``ras``);
   2. brain mask: the given one, else ``image > 0`` with holes filled (skull-stripped input such as VALDO);
-     ``brain_mask_mode: mask_and_positive`` additionally drops voxels <= 0 of the image, as
-     ``cmb/transfer/build_private_grids.py`` did for the in-house cohorts;
+     ``brain_mask_mode: mask_and_positive`` additionally drops voxels <= 0 of the image (for data whose mask
+     reaches beyond the zero background);
   3. INPAINT HOOK (experiment entry point, off by default): ``inpaint(image, mask) -> image`` on the native grid,
      before the inversion -- where MicrobleedNet painted over vessels;
   4. inverted scale ``1 - I / max(I)`` inside the brain, 0 outside (bright microbleeds; 0 is reserved for outside);
@@ -282,7 +282,7 @@ def prepare_case(case: Dict, out_dir: str, pp: Dict, overwrite: bool = False) ->
                             label_voxels_under_mask=int((imask & (label > 0)).sum()))
 
     mode = pp.get("brain_mask_mode", "mask")
-    if mode == "mask_and_positive":                 # build_private_grids.py (in-house cohorts): brain &= image > 0
+    if mode == "mask_and_positive":                 # brain &= image > 0
         mask = mask & (corrected > 0)
     elif mode != "mask":
         raise ValueError(f"brain_mask_mode must be 'mask' or 'mask_and_positive', not {mode!r}")

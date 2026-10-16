@@ -2,9 +2,9 @@
 # One experiment on a GPU node: prepare -> split -> 5-fold CV -> evaluation -> final model (resumable: a finished fold
 # is skipped when the job is submitted again, e.g. after a time limit).
 #   cd cmb_3d_unet_experiments && mkdir -p logs
-#   sbatch scripts/slurm_run_experiment.sbatch configs/catalina_swi.yaml [train.epochs=60 ...]
+#   sbatch scripts/slurm_run_experiment.sbatch ../my_runs/my_baseline.yaml [train.epochs=60 ...]
 # One training needs ~1.8 GiB GPU memory, so a GPU share (shard) is enough; without shards: --gres=gpu:1.
-# Host RAM: all cases are held in memory (~12 GB for 61 SWI, ~15-17 GB for 75 T2*).
+# Host RAM: all cases are held in memory (~0.2 GB per case at 0.5 x 0.5 x 1 mm, measured 12-17 GB for 60-75 cases).
 #SBATCH --job-name=cmbx_run
 #SBATCH --partition=gpu
 #SBATCH --gres=shard:1

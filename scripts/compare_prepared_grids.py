@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Compare `cmbx prepare` output with an existing grid folder of cmb-valdo-chain (e.g. the in-house grids
-``mb-arena/gitter/t2star/c2s-<id>/`` or VALDO ``dev/gitter_d/<id>/``), voxel by voxel, for image / FRST / label.
+"""Compare `cmbx prepare` output with another grid folder (e.g. one made by an earlier version or by
+cmb-valdo-chain, ``<grid_dir>/<prefix><id>/``), voxel by voxel, for image / FRST / label.
 Prints only aggregate numbers per case index (no case identifiers in the JSON output unless --with-ids).
 
   python scripts/compare_prepared_grids.py --new <prepared_dir> --old <grid_dir> --old-prefix c2s- \
