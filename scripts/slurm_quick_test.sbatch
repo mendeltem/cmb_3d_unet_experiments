@@ -16,7 +16,7 @@ cd "$SLURM_SUBMIT_DIR"
 echo "== node $(hostname)  job $SLURM_JOB_ID  $(date '+%F %T')"
 nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
 echo "== check-env"; cmbx check-env
-echo "== phantoms"; cmbx make-phantoms data/phantoms --n 10
+echo "== phantoms (examples/phantoms, part of the repo)"; ls examples/phantoms | head -3
 echo "== smoke CV on GPU"; time cmbx run-experiment configs/smoke_gpu.yaml
 echo "== result"; cat runs/smoke_gpu/summary.json 2>/dev/null | head -20
 echo "== done $(date '+%F %T')  (numbers from the smoke run mean nothing; only that every step ran)"

@@ -1,9 +1,9 @@
-# Tiny GPU run (SLURM quick test) on the synthetic phantoms (cmbx make-phantoms data/phantoms): checks that every path runs.
+# Tiny GPU run (SLURM quick test) on the synthetic phantoms in examples/phantoms: checks that every path runs.
 # Numbers from this config mean nothing.
 name: smoke_gpu
 output_root: runs
 data:
-  cases: data/phantoms/cases.csv
+  cases: examples/phantoms/cases.csv
   prepared_dir: data/phantoms_prepared
   splits: data/phantoms_splits.json
   n_folds: 5

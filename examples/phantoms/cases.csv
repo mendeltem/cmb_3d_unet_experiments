@@ -1,0 +1,11 @@
+id,image,label,brain_mask,tissue_map,inpaint_mask,group
+phantom-00,phantom-00/phantom-00_image.nii.gz,phantom-00/phantom-00_label.nii.gz,phantom-00/phantom-00_brain.nii.gz,phantom-00/phantom-00_tissue.nii.gz,,phantom
+phantom-01,phantom-01/phantom-01_image.nii.gz,phantom-01/phantom-01_label.nii.gz,phantom-01/phantom-01_brain.nii.gz,phantom-01/phantom-01_tissue.nii.gz,,phantom
+phantom-02,phantom-02/phantom-02_image.nii.gz,phantom-02/phantom-02_label.nii.gz,phantom-02/phantom-02_brain.nii.gz,phantom-02/phantom-02_tissue.nii.gz,,phantom
+phantom-03,phantom-03/phantom-03_image.nii.gz,phantom-03/phantom-03_label.nii.gz,phantom-03/phantom-03_brain.nii.gz,phantom-03/phantom-03_tissue.nii.gz,,phantom
+phantom-04,phantom-04/phantom-04_image.nii.gz,phantom-04/phantom-04_label.nii.gz,phantom-04/phantom-04_brain.nii.gz,phantom-04/phantom-04_tissue.nii.gz,,phantom
+phantom-05,phantom-05/phantom-05_image.nii.gz,phantom-05/phantom-05_label.nii.gz,phantom-05/phantom-05_brain.nii.gz,phantom-05/phantom-05_tissue.nii.gz,,phantom
+phantom-06,phantom-06/phantom-06_image.nii.gz,phantom-06/phantom-06_label.nii.gz,phantom-06/phantom-06_brain.nii.gz,phantom-06/phantom-06_tissue.nii.gz,,phantom
+phantom-07,phantom-07/phantom-07_image.nii.gz,phantom-07/phantom-07_label.nii.gz,phantom-07/phantom-07_brain.nii.gz,phantom-07/phantom-07_tissue.nii.gz,,phantom
+phantom-08,phantom-08/phantom-08_image.nii.gz,phantom-08/phantom-08_label.nii.gz,phantom-08/phantom-08_brain.nii.gz,phantom-08/phantom-08_tissue.nii.gz,,phantom
+phantom-09,phantom-09/phantom-09_image.nii.gz,phantom-09/phantom-09_label.nii.gz,phantom-09/phantom-09_brain.nii.gz,phantom-09/phantom-09_tissue.nii.gz,,phantom
