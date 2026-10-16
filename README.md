@@ -29,22 +29,26 @@ source env.sh
 - Installs Python, PyTorch for your GPU, `cmbx` and the pretrained model. Ends with `ALL REQUIRED CHECKS PASSED`.
 - `source env.sh` in every new shell.
 
-## Data: one folder per case
+## Data
 
 ```
 my_cohort/
-├── files.xlsx                          list of all files
-└── derivatives/preprocessed/
-    └── sub-001/
-        ├── sub-001_t2star.nii.gz       bias-corrected T2* (SWI: sub-001_swi.nii.gz)
-        ├── sub-001_brainmask.nii.gz    brain mask
-        ├── sub-001_cmb.nii.gz          microbleed mask (training only)
-        ├── sub-001_synthseg.nii.gz     optional: SynthSeg, for --csf_rule True
-        └── sub-001_flair.nii.gz        optional: FLAIR registered to the T2*, for --flair True
+├── files.xlsx                              list of all files
+└── derivatives/
+    ├── preprocessed/sub-001/
+    │   ├── sub-001_t2star.nii.gz           bias-corrected T2* (SWI: sub-001_swi.nii.gz)
+    │   ├── sub-001_brainmask.nii.gz        brain mask
+    │   ├── sub-001_cmb.nii.gz              microbleed mask (training only)
+    │   ├── sub-001_synthseg.nii.gz         optional: SynthSeg, for --csf_rule True
+    │   └── sub-001_flair.nii.gz            optional: FLAIR on the T2* matrix, for --flair True
+    ├── images/sub-001_preproc.nii.gz       MicrobleedNet input (inverted T2*)
+    ├── frsts/sub-001_frst.nii.gz           MicrobleedNet FRST
+    ├── images_inpainted/                   optional: the same with vessel inpainting, for --inpaint True
+    └── frsts_inpainted/
 ```
 
 - Examples: `examples/train` (10 synthetic cases), `examples/new` (2, no labels), `examples/raw` (scans before preprocessing).
-- `-i` takes the cohort folder or its `derivatives/preprocessed`. A folder written by `microbleednet preprocess` works too.
+- `images/` and `frsts/` are MicrobleedNet's own folder names: both methods read the same inputs.
 
 ## Preprocess
 
@@ -54,29 +58,33 @@ cmbx preprocess -i examples/raw -ir _T2starw -f True -b examples/raw -br _brainm
 
 - Writes one folder per case and `../my_runs/cohort/files.xlsx`.
 - Without `-f True`: skull stripping and bias correction with FSL (BET + FAST), as MicrobleedNet.
-- FLAIR (`-flr`): BET, FAST and a rigid FLIRT registration onto the T2* (`--flair_registered True` if it is already).
-- `--synthseg True` adds the tissue map (FreeSurfer; from the FLAIR when there is one), `--inpaint True` the
-  vessel-inpainted scan. `-mod swi` names the scan `_swi`.
+- FLAIR (`-flr`, same session): BET, FAST, then onto the T2* by the scanner coordinates (`--flair_registered True` if it is already).
+- `--synthseg True` adds the tissue map (FreeSurfer; from the FLAIR when there is one). `-mod swi` names the scan `_swi`.
+- `--microbleednet_inputs True` adds `images/` + `frsts/` with MicrobleedNet's own code (installed separately),
+  `--inpaint True` also `images_inpainted/` + `frsts_inpainted/`. Without them, `cmbx train -i ../my_runs/cohort`
+  computes the FRST itself.
 
 ## Train
 
 ```bash
-cmbx train -i examples/train -l examples/train -m ../my_runs/my_model
+cmbx train -i examples/train/derivatives -l examples/train/derivatives/preprocessed -m ../my_runs/my_model
 ```
 
+- As MicrobleedNet: `-i` holds `images/` and `frsts/`, `-l` the microbleed masks; image and FRST go into the network.
 - One model -> `../my_runs/my_model/final/model.pt`; 20 % of the cases choose the threshold (`-tr_prop 0.8`).
 - About 25 min on one GPU for 60 cases.
 
 Switch steps on or off, e.g. without FRST:
 
 ```bash
-cmbx train -i examples/train -l examples/train -m ../my_runs/no_frst --frst False
+cmbx train -i examples/train/derivatives -l examples/train/derivatives/preprocessed -m ../my_runs/no_frst --frst False
 ```
 
 | option | default | |
 |---|---|---|
 | `--frst` | `True` | FRST as second input channel |
-| `--inpaint` | `False` | train on vessel-inpainted scans (MicrobleedNet preprocessing) |
+| `--inpaint` | `False` | use `images_inpainted/` + `frsts_inpainted/` (MicrobleedNet's vessel inpainting) |
+| `--frst_from` | `microbleednet` | FRST from `frsts/`, or `cmbx` (computed on the 0.5 mm grid) |
 | `--csf_rule` | `False` | drop detections in CSF (needs `_synthseg`) |
 | `--flair` | `False` | FLAIR as extra input channel (needs `_flair`) |
 | `-cand_disc` | `False` | train step 2, MicrobleedNet's teacher–student (`--disc_model cnn`: small CNN) |
@@ -88,15 +96,15 @@ Every MicrobleedNet option works (`-tr_prop`, `-es`, `-cp_type`, `-lrm`, `-opt`,
 ## Fine-tune the pretrained model
 
 ```bash
-cmbx fine_tune -i examples/train -l examples/train -m pre -o ../my_runs/my_finetuned
+cmbx fine_tune -i examples/train/derivatives -l examples/train/derivatives/preprocessed -m pre -o ../my_runs/my_finetuned
 ```
 
-- `-m pre`: the pretrained VALDO model; or any model folder. Learning rate 0.0001.
+- `-m pre`: the pretrained VALDO model (trained with the cmbx FRST, which it keeps); or any model folder. Learning rate 0.0001.
 
 ## Predict
 
 ```bash
-cmbx evaluate -i examples/new -m ../my_runs/my_model -o ../my_runs/pred
+cmbx evaluate -i examples/new/derivatives -m ../my_runs/my_model -o ../my_runs/pred
 ```
 
 - Masks on the input grid: `../my_runs/pred/final_predictions/predicted_final_cmbx_<case>.nii.gz`.
@@ -105,7 +113,7 @@ cmbx evaluate -i examples/new -m ../my_runs/my_model -o ../my_runs/pred
 ## Cross-validation
 
 ```bash
-cmbx cross_validate -i examples/train -l examples/train -o ../my_runs/cv -fold 5
+cmbx cross_validate -i examples/train/derivatives -l examples/train/derivatives/preprocessed -o ../my_runs/cv -fold 5
 ```
 
 - Lesion-level F1 out of fold: `../my_runs/cv/summary.json`. Same folds for every setting you compare.

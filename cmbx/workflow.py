@@ -16,6 +16,7 @@ The data of a cohort (README "Data"); ``-i`` takes the cohort folder or its ``de
                                              <name>_synthseg.nii.gz    optional SynthSeg labels (--csf_rule True)
                                              <name>_flair.nii.gz       optional FLAIR registered to the scan (--flair True)
                                              <name>_inpainted.nii.gz   optional vessel-inpainted scan (--inpaint True)
+    <cohort>/derivatives/images_inpainted/<name>_preproc.nii.gz        or MicrobleedNet's inpainted input (inverted back)
 
 A folder written by ``microbleednet preprocess`` is read as well: ``fsl_preprocessed/images/<name>_preproc`` (BET +
 FAST) is the image, ``images/<name>_preproc`` (vessels inpainted, intensity inverted) is inverted back for
@@ -157,11 +158,23 @@ def collect(inp: str, label_dir: Optional[str] = None, need_labels: bool = False
     work = work or default_work(inp)
     rows, missing = [], []
     if mbnet:
-        fsl_dir, inv_dir = os.path.join(inp, "fsl_preprocessed", "images"), os.path.join(inp, "images")
-        names = sorted(set(_names(fsl_dir, "_preproc")) | set(_names(inv_dir, "_preproc")))
+        # MicrobleedNet layout: images/<n>_preproc (1 - I/max in the brain) + frsts/<n>_frst; a cohort's derivatives/ may
+        # also hold images_inpainted/ + frsts_inpainted/ (then images/ is the variant WITHOUT vessel inpainting). In the
+        # output of `microbleednet preprocess` itself images/ is inpainted and the original is in fsl_preprocessed/images.
+        # our cohort layout (preprocessed/ or images_inpainted/ next to images/): images/ = WITHOUT inpainting
+        split = os.path.isdir(os.path.join(inp, "images_inpainted")) or os.path.isdir(os.path.join(inp, "preprocessed"))
+        if inpaint and split and not os.path.isdir(os.path.join(inp, "images_inpainted")):
+            raise SystemExit(f"--inpaint True: {inp} has no images_inpainted/ (cmbx preprocess --inpaint True --microbleednet_inputs True)")
+        sub = "images_inpainted" if (inpaint and split) else "images"
+        img_dir, frst_dir = os.path.join(inp, sub), os.path.join(inp, sub.replace("images", "frsts"))
+        fsl_dir = os.path.join(inp, "fsl_preprocessed", "images")
+        use_fsl = not inpaint and not split                # genuine MicrobleedNet output: its images/ are inpainted
+        prep = os.path.join(inp, "preprocessed") if os.path.isdir(os.path.join(inp, "preprocessed")) else None
+        names = sorted(set(_names(img_dir, "_preproc")) | (set(_names(fsl_dir, "_preproc")) if use_fsl else set()))
         inputs = os.path.join(work, "inputs")
         os.makedirs(inputs, exist_ok=True)
-        log(f"{inp}: MicrobleedNet folder, {len(names)} case(s)")
+        log(f"{inp}: MicrobleedNet layout, {len(names)} case(s), image from "
+            + (f"{os.path.relpath(fsl_dir, inp)} (cmbx computes the FRST)" if use_fsl else f"{sub}/ + {os.path.relpath(frst_dir, inp)}/"))
     else:
         names = list(folders)
         if not names:
@@ -172,28 +185,45 @@ def collect(inp: str, label_dir: Optional[str] = None, need_labels: bool = False
         label = _label(n, cdir, label_dir)
         tissue = _nii(cdir, n, "_synthseg") or _nii(os.path.join(inp, "synthseg"), n, "_synthseg")
         flair = _nii(cdir, n, "_flair")
+        frst_file = ""
         if mbnet:
-            fsl, inv = _nii(fsl_dir, n, "_preproc"), _nii(inv_dir, n, "_preproc")
-            src = inv if inpaint else fsl
-            if not src:
-                missing.append((n, "images/<name>_preproc (MicrobleedNet's inpainted image)" if inpaint else
-                                "fsl_preprocessed/images/<name>_preproc: MicrobleedNet keeps the image before vessel "
+            pdir = os.path.join(prep, n) if prep else None
+            label = label or (_label(n, pdir, None) if pdir else None)
+            tissue = tissue or _nii(pdir, n, "_synthseg")
+            flair = flair or _nii(pdir, n, "_flair")
+            inv, fsl = _nii(img_dir, n, "_preproc"), (_nii(fsl_dir, n, "_preproc") if use_fsl else None)
+            if use_fsl and not fsl:
+                missing.append((n, "fsl_preprocessed/images/<name>_preproc: MicrobleedNet keeps the image before vessel "
                                 "inpainting only without -f True; run `cmbx preprocess -i <your scans> -ir <ending> -f True "
                                 "-o <new folder>` and use that folder"))
                 continue
-            brain = _brain_from(fsl or inv, os.path.join(inputs, f"{n}_brainmask.nii.gz"))
-            image = src
-            if inpaint:                                    # MicrobleedNet stores 1 - I / max(I) in the brain: invert back
+            if not use_fsl and not inv:
+                missing.append((n, f"{sub}/{n}_preproc.nii.gz"))
+                continue
+            brain = _nii(pdir, n, "_brainmask") or _brain_from(fsl or inv, os.path.join(inputs, f"{n}_brainmask.nii.gz"))
+            if use_fsl:
+                image = fsl
+            else:                                          # MicrobleedNet stores 1 - I / max(I) in the brain: invert back
                 def make(inv=inv, brain=brain):
                     im = nib.load(inv)
                     b = np.asarray(nib.load(brain).dataobj) > 0
                     return nib.Nifti1Image(((1.0 - np.asarray(im.dataobj, np.float32)) * b).astype(np.float32), im.affine)
-                image = _write_if_stale(os.path.join(inputs, f"{n}_inpainted.nii.gz"), [inv, brain], make)
+                image = _write_if_stale(os.path.join(inputs, f"{n}_{sub}.nii.gz"), [inv, brain], make)
+                frst_file = _nii(frst_dir, n, "_frst") or ""
         else:
-            image = _nii(cdir, n, "_inpainted") if inpaint else _scan(cdir, n)
             brain = _nii(cdir, n, "_brainmask")
+            image = _nii(cdir, n, "_inpainted") if inpaint else _scan(cdir, n)
+            inv = _nii(os.path.join(os.path.dirname(inp), "images_inpainted"), n, "_preproc") if inpaint else None
+            if inpaint and not image and inv and brain:   # MicrobleedNet's inpainted input (1 - I/max): invert back
+                def make(inv=inv, brain=brain):
+                    im = nib.load(inv)
+                    b = np.asarray(nib.load(brain).dataobj) > 0
+                    return nib.Nifti1Image(((1.0 - np.asarray(im.dataobj, np.float32)) * b).astype(np.float32), im.affine)
+                os.makedirs(os.path.join(work, "inputs"), exist_ok=True)
+                image = _write_if_stale(os.path.join(work, "inputs", f"{n}_inpainted.nii.gz"), [inv, brain], make)
             if not image:
-                missing.append((n, f"{n}_inpainted.nii.gz (run cmbx preprocess --inpaint True)" if inpaint else f"{n}_t2star"))
+                missing.append((n, f"{n}_inpainted.nii.gz or derivatives/images_inpainted/{n}_preproc.nii.gz (run cmbx preprocess "
+                                   "--inpaint True)" if inpaint else f"{n}_t2star"))
                 continue
             if not brain:
                 missing.append((n, f"{n}_brainmask.nii.gz"))
@@ -208,10 +238,23 @@ def collect(inp: str, label_dir: Optional[str] = None, need_labels: bool = False
             missing.append((n, f"{n}_flair.nii.gz (needed by --flair True; use a folder with the FLAIR cases only)"))
             continue
         rows.append(dict(id=n, image=image, label=label or "", brain_mask=brain, tissue_map=tissue or "",
-                         inpaint_mask="", group="", flair=flair or ""))
+                         inpaint_mask="", group="", flair=flair or "", frst_file=frst_file))
     if missing:
         raise SystemExit(f"{len(missing)} case(s) incomplete in {inp}:\n" + "\n".join(f"  {n}: missing {w}" for n, w in missing))
     return rows
+
+
+def use_given_frst(cfg: Dict, rows: List[Dict], frst_from: Optional[str], log=print) -> None:
+    """MicrobleedNet layout with frsts/: the network gets MicrobleedNet's own FRST (resampled with the image) instead of
+    the cmbx FRST, so both methods see the same inputs. --frst_from cmbx keeps the cmbx FRST."""
+    T = cfg["train"]
+    have = rows and all(r.get("frst_file") for r in rows)
+    if frst_from == "microbleednet" and not have:
+        raise SystemExit("--frst_from microbleednet needs frsts/<name>_frst.nii.gz for every case (MicrobleedNet layout)")
+    if have and frst_from != "cmbx" and "frst" in T["channels"]:
+        cfg["preprocess"]["extra_channels"] = dict(cfg["preprocess"].get("extra_channels") or {}, frst_mbnet="frst_file")
+        T["channels"] = ["frst_mbnet" if c == "frst" else c for c in T["channels"]]
+        log("FRST channel: MicrobleedNet's frsts/ (--frst_from cmbx: compute the cmbx FRST instead)")
 
 
 def _lesions(rows: List[Dict]) -> None:
@@ -341,6 +384,10 @@ def train(a, log=print, fine_tune: bool = False) -> str:
         a.flair = "flair" in (base.get("channels") or [])
     if fine_tune and not _given(a, "csf_rule"):
         a.csf_rule = bool(base.get("csf_rule", False))
+    if fine_tune and not getattr(a, "frst_from", None):   # keep the FRST the start model was trained with
+        import yaml
+        ch = yaml.safe_load(open(os.path.join(init, "config.yaml")))["train"]["channels"]
+        a.frst_from = "microbleednet" if "frst_mbnet" in ch else "cmbx"
     work = a.work_dir or default_work(preprocessed_folder(a.inp_dir))
     cases = os.path.join(run_dir, "cases.csv")
     cfg = build_config(a, run_dir, cases, os.path.join(work, "grid"), log)
@@ -349,6 +396,7 @@ def train(a, log=print, fine_tune: bool = False) -> str:
                    need_flair="flair" in cfg["train"]["channels"])
     os.makedirs(run_dir, exist_ok=True)
     write_caselist(rows, cases)
+    use_given_frst(cfg, rows, getattr(a, "frst_from", None), log)
     cfg["data"]["prepared_dir"] = _prepared_dir(work, cfg, inpaint)
     T = cfg["train"]
     if not _given(a, "train_prop") and "train_prop" not in str(getattr(a, "set", "")):
@@ -433,6 +481,7 @@ def cross_validate(a, log=print) -> str:
     assign_folds(rows, int(a.cv_fold), int(a.fold_seed))
     os.makedirs(out, exist_ok=True)
     write_caselist(rows, cases)
+    use_given_frst(cfg, rows, getattr(a, "frst_from", None), log)
     cfg["data"]["prepared_dir"] = _prepared_dir(work, cfg, inpaint)
     cfg["data"]["n_folds"] = int(a.cv_fold)
     if _given(a, "early_stop_val"):                        # CV: early stopping on the inner fold, in evaluations
@@ -554,7 +603,7 @@ def preprocess(a, log=print) -> str:
             else:
                 register_flair(flair_src, img, brain, fl, seg if a.synthseg else None, a.threads)
             sources[name] = "flair" if a.synthseg and not a.flair_registered else sources.get(name, "")
-            log(f"{name}: FLAIR registered to the scan" + (" + SynthSeg from FLAIR" if sources[name] == "flair" else ""))
+            log(f"{name}: FLAIR onto the scan" + (" + SynthSeg from FLAIR" if sources[name] == "flair" else ""))
         if a.synthseg and (not os.path.exists(seg) or a.overwrite and sources.get(name) != "flair"):
             exe = shutil.which("mri_synthseg")
             if not exe:
@@ -575,16 +624,20 @@ def preprocess(a, log=print) -> str:
                 nib.save(nib.Nifti1Image((arr * b).astype(np.float32), im.affine), dst)
     if missing:
         raise SystemExit(f"{len(missing)} case(s) incomplete:\n" + "\n".join(f"  {n}: missing {w}" for n, w in missing))
+    if a.microbleednet_inputs:
+        write_microbleednet_inputs(out, a.inpaint, a.overwrite, log)
     table = write_file_table(out, sources)
     log(f"{len(items)} case(s) ({n_new} new) -> {out}; file list {table}")
     return out
 
 
 def register_flair(flair: str, scan: str, brain: str, out: str, synthseg_out: Optional[str] = None, threads: int = 4) -> None:
-    """FLAIR of the session -> the scan: fslreorient2std, BET (-R -f 0.4), FAST -B --nopve -t 2, FLIRT 6 dof (normalised
-    mutual information) onto the bias-corrected scan, trilinear, masked with the scan's brain mask. With
-    ``synthseg_out``: SynthSeg 2.0 --robust on the FLAIR (better tissue contrast and thinner slices than T2* / SWI),
-    carried to the scan with the same matrix (nearest neighbour)."""
+    """FLAIR of the same session -> the scan matrix: fslreorient2std, BET (-R -f 0.4), FAST -B --nopve -t 2, then onto
+    the scan by the scanner coordinates of the two headers (trilinear), masked with the scan's brain mask. A voxel-space
+    FLIRT start fails when the two files are stored with different axis orders (e.g. LPS scan, RAS FLAIR: 180 degrees
+    outside FLIRT's search range); scans of one session share the scanner frame, so the headers align them.
+    With ``synthseg_out``: SynthSeg 2.0 --robust on the FLAIR (better tissue contrast and thinner slices than T2* /
+    SWI), brought onto the scan the same way (nearest neighbour)."""
     import nibabel.processing
     with tempfile.TemporaryDirectory(dir=os.path.dirname(out)) as tmp:
         t = lambda f: os.path.join(tmp, f)
@@ -592,20 +645,51 @@ def register_flair(flair: str, scan: str, brain: str, out: str, synthseg_out: Op
         run(_fsl("fslreorient2std"), flair, t("F.nii.gz"))
         run(_fsl("bet"), t("F.nii.gz"), t("Fb.nii.gz"), "-R", "-f", "0.4")
         run(_fsl("fast"), "-B", "--nopve", "-t", "2", "-o", t("Fb"), t("Fb.nii.gz"))
-        run(_fsl("flirt"), "-in", t("Fb_restore.nii.gz"), "-ref", scan, "-dof", "6", "-cost", "normmi", "-searchrx", "-20", "20",
-            "-searchry", "-20", "20", "-searchrz", "-20", "20", "-omat", t("m.mat"), "-out", t("Fs.nii.gz"), "-interp", "trilinear")
         ref, b = nib.load(scan), np.asarray(nib.load(brain).dataobj) > 0
-        nib.save(nib.Nifti1Image((np.asarray(nib.load(t("Fs.nii.gz")).dataobj, np.float32) * b).astype(np.float32), ref.affine), out)
+        on = nibabel.processing.resample_from_to(nib.load(t("Fb_restore.nii.gz")), ref, order=1)
+        nib.save(nib.Nifti1Image((np.asarray(on.dataobj, np.float32) * b).astype(np.float32), ref.affine), out)
         if synthseg_out:
             exe = shutil.which("mri_synthseg")
             if not exe:
                 raise SystemExit("--synthseg True needs FreeSurfer 7.3+ (mri_synthseg on the PATH)")
             run(exe, "--i", t("F.nii.gz"), "--o", t("S.nii.gz"), "--robust", "--threads", threads)
-            on_f = nibabel.processing.resample_from_to(nib.load(t("S.nii.gz")), nib.load(t("F.nii.gz")), order=0)
-            nib.save(nib.Nifti1Image(np.asarray(on_f.dataobj).astype(np.int16), on_f.affine), t("Sf.nii.gz"))
-            run(_fsl("flirt"), "-in", t("Sf.nii.gz"), "-ref", scan, "-applyxfm", "-init", t("m.mat"), "-interp",
-                "nearestneighbour", "-out", t("Ss.nii.gz"))
-            nib.save(nib.Nifti1Image(np.round(np.asarray(nib.load(t("Ss.nii.gz")).dataobj)).astype(np.int16), ref.affine), synthseg_out)
+            sg = nibabel.processing.resample_from_to(nib.load(t("S.nii.gz")), ref, order=0)
+            nib.save(nib.Nifti1Image(np.round(np.asarray(sg.dataobj)).astype(np.int16), ref.affine), synthseg_out)
+
+
+def write_microbleednet_inputs(prep: str, inpaint: bool, overwrite: bool = False, log=print) -> None:
+    """Next to the preprocessed folder: images/<n>_preproc + frsts/<n>_frst as MicrobleedNet's preprocess_subject makes
+    them, without vessel inpainting; with ``inpaint`` also images_inpainted/ + frsts_inpainted/ (its exact output).
+    Uses MicrobleedNet's own functions (get_frst_data, inpaint_vessels), so microbleednet must be installed."""
+    try:
+        from microbleednet.scripts import data_preparation as dp
+    except ImportError:
+        raise SystemExit("--microbleednet_inputs True uses MicrobleedNet's own functions: install microbleednet "
+                         "(https://github.com/v-sundaresan/microbleed-detection)")
+    base = os.path.dirname(os.path.abspath(prep))
+    for n, d in case_folders(prep).items():
+        scan = _scan(d, n)
+        ref = nib.load(scan)
+        variants = [("", False)] + ([("_inpainted", True)] if inpaint else [])
+        for tag, inp in variants:
+            fi, ff = os.path.join(base, "images" + tag, f"{n}_preproc.nii.gz"), os.path.join(base, "frsts" + tag, f"{n}_frst.nii.gz")
+            if os.path.exists(ff) and not overwrite:
+                continue
+            os.makedirs(os.path.dirname(fi), exist_ok=True)
+            os.makedirs(os.path.dirname(ff), exist_ok=True)
+            if inp:
+                image, _, frst = dp.preprocess_subject(dict(basename=n, input_path=scan))
+            else:                                          # preprocess_subject without inpaint_vessels
+                image = ref.get_fdata()
+                mask = (image > 0).astype(int)
+                frst = dp.get_frst_data(image)
+                frst[np.isnan(frst)] = 0
+                frst -= np.min(frst)
+                frst /= max(np.max(frst), 1e-12)
+                image = (1 - image / np.max(image)) * mask.astype(float)
+            nib.save(nib.Nifti1Image(image, ref.affine, header=ref.header), fi)
+            nib.save(nib.Nifti1Image(frst, ref.affine, header=ref.header), ff)
+        log(f"{n}: MicrobleedNet inputs" + (" (with and without inpainting)" if inpaint else ""))
 
 
 def write_file_table(prep: str, sources: Optional[Dict[str, str]] = None) -> str:
@@ -691,6 +775,8 @@ def _common_train(p, fine_tune: bool = False, cv: bool = False) -> None:
     c.add_argument("--frst", type=B, default=None, help="FRST as second input channel [True]")
     c.add_argument("--csf_rule", type=B, default=None, help="drop detections in CSF, needs <name>_synthseg [False]")
     c.add_argument("--flair", type=B, default=None, help="FLAIR as extra input channel, needs <name>_flair [False]")
+    c.add_argument("--frst_from", choices=["microbleednet", "cmbx"], default=None,
+                   help="FRST channel: MicrobleedNet's frsts/ (default when -i has them) or the cmbx FRST")
     c.add_argument("--disc_model", choices=["teacher_student", "cnn"], default=None, help="step 2 network [teacher_student]")
     c.add_argument("--kd_temperature", type=float, default=None, help="teacher_student temperature [4]")
     c.add_argument("--kd_alpha", type=float, default=None, help="teacher_student distillation weight [0.4]")
@@ -725,11 +811,14 @@ def add_parsers(sub, log) -> None:
     o.add_argument("-flr", "--flair_regex", default=None, help="ending of the FLAIR scans of the same session, e.g. _FLAIR")
     o.add_argument("-fl", "--flair_dir", default=None, help="folder with the FLAIR scans [-i]")
     o.add_argument("--flair_registered", type=B, default=False,
-                   help="FLAIR already on the scan matrix; otherwise BET + FAST + FLIRT 6 dof onto the scan (FSL)")
+                   help="FLAIR already on the scan matrix; otherwise BET + FAST, onto the scan by the headers (FSL)")
     o.add_argument("-mod", "--modality", choices=["t2star", "swi"], default="t2star", help="name of the scan file [t2star]")
     o.add_argument("--synthseg", type=B, default=False, help="add <name>_synthseg (FreeSurfer mri_synthseg; from the FLAIR if given)")
     o.add_argument("--threads", type=int, default=4, help="threads for SynthSeg")
     o.add_argument("--inpaint", type=B, default=False, help="add <name>_inpainted (MicrobleedNet inpaint_vessels)")
+    o.add_argument("--microbleednet_inputs", type=B, default=False,
+                   help="also images/ + frsts/ (and with --inpaint images_inpainted/ + frsts_inpainted/) next to the "
+                        "preprocessed folder, made with MicrobleedNet's own functions (needs microbleednet installed)")
     o.add_argument("--overwrite", type=B, default=False)
     o.add_argument("-v", "--verbose", type=B, default=None, help="(no effect)")
     o.add_argument("-pbar", "--progress_bar", type=B, default=None, help="(no effect)")

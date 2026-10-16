@@ -79,7 +79,13 @@ RAM. Full test suite: `pytest -q`. Every command and option end to end: `python 
 
 ### What is needed for training and for inference
 
-One folder per case under `<cohort>/derivatives/preprocessed/` (README "Data"); `-i` takes the cohort or that folder.
+One folder per case under `<cohort>/derivatives/preprocessed/` (README "Data"). As MicrobleedNet, `-i` may point to the
+folder that holds `images/<id>_preproc` and `frsts/<id>_frst` (`<cohort>/derivatives`) with `-l` on the masks
+(`derivatives/preprocessed`): the image is inverted back and MicrobleedNet's FRST becomes the second channel
+(`frst_mbnet`, resampled with the image), so both methods see the same inputs; `--inpaint True` reads
+`images_inpainted/` + `frsts_inpainted/`; `--frst_from cmbx` computes the cmbx FRST instead. `-i <cohort>` (or
+`derivatives/preprocessed`) uses the bias-corrected scan and the cmbx FRST. A genuine `microbleednet preprocess` output
+(no `preprocessed/` next to `images/`) has inpainted `images/`; without `--inpaint` its `fsl_preprocessed/images` is used.
 
 | file in `<case>/` | training (`cmbx train`, `cross_validate`) | inference (`cmbx evaluate`) |
 |---|---|---|
@@ -87,13 +93,14 @@ One folder per case under `<cohort>/derivatives/preprocessed/` (README "Data"); 
 | `<case>_brainmask.nii.gz` | required | required |
 | `<case>_cmb.nii.gz` (reference microbleeds; `_label` also works) | required | not needed |
 | `<case>_synthseg.nii.gz` (SynthSeg labels, any grid) | only with `--csf_rule True` | only with `--csf_rule True` |
-| `<case>_flair.nii.gz` (FLAIR registered to the scan; another grid of the same session also works) | only with `--flair True` | if the model uses FLAIR |
-| `<case>_inpainted.nii.gz` (vessel-inpainted scan) | only with `--inpaint True` | if the model was trained so |
+| `<case>_flair.nii.gz` (FLAIR on the scan matrix; another grid of the same session also works) | only with `--flair True` | if the model uses FLAIR |
+| `<case>_inpainted.nii.gz` (vessel-inpainted scan), or `derivatives/images_inpainted/<case>_preproc.nii.gz` (MicrobleedNet's inpainted input, inverted back) | only with `--inpaint True` | if the model was trained so |
 
-`cmbx preprocess -flr <ending>` registers the FLAIR to the scan (fslreorient2std, BET -R -f 0.4, FAST -B --nopve -t 2,
-FLIRT 6 dof with normalised mutual information, trilinear, brain mask) and, with `--synthseg True`, runs SynthSeg
---robust on the FLAIR (better tissue contrast and thinner slices than T2* / SWI) and carries it over with the same
-matrix (nearest neighbour); without FLAIR SynthSeg runs on the scan. FLAIR and SynthSeg on another grid are brought
+`cmbx preprocess -flr <ending>` brings the FLAIR of the same session onto the scan (fslreorient2std, BET -R -f 0.4,
+FAST -B --nopve -t 2, then by the scanner coordinates of the headers, trilinear, brain mask; a voxel-space FLIRT start
+failed on scans stored with different axis orders) and, with `--synthseg True`, runs SynthSeg
+--robust on the FLAIR (better tissue contrast and thinner slices than T2* / SWI) and brings it over the same
+way (nearest neighbour); without FLAIR SynthSeg runs on the scan. FLAIR and SynthSeg on another grid are brought
 onto the scan in world coordinates (linear / nearest neighbour). `cmbx preprocess` writes this layout and
 `files.xlsx` (one row per case, one column per file). The output folder of `microbleednet preprocess` is read too:
 `fsl_preprocessed/images/<name>_preproc` is the scan, `images/<name>_preproc` (vessels inpainted, intensity inverted)
@@ -251,9 +258,9 @@ every output on the input matrix/affine, detections on the reference lesions, eq
 ## Full example run (synthetic data, about 1 min on a GPU, 3 min on a CPU)
 
 ```bash
-cmbx cross_validate -i examples/train -l examples/train -o ../my_runs/example_cv -fold 5 --config configs/example.yaml
-cmbx train -i examples/train -l examples/train -m ../my_runs/example_model --config configs/example.yaml
-cmbx evaluate -i examples/new -m ../my_runs/example_model -o ../my_runs/example_pred
+cmbx cross_validate -i examples/train/derivatives -l examples/train/derivatives/preprocessed -o ../my_runs/example_cv -fold 5 --config configs/example.yaml
+cmbx train -i examples/train/derivatives -l examples/train/derivatives/preprocessed -m ../my_runs/example_model --config configs/example.yaml
+cmbx evaluate -i examples/new/derivatives -m ../my_runs/example_model -o ../my_runs/example_pred
 ```
 The same with a case list and a config file (all settings in one YAML):
 ```bash
@@ -339,7 +346,7 @@ even "False", as true).
 | `-f`, `-ir`, `-lr` | preprocess: scans already skull-stripped and bias-corrected; name endings, as MicrobleedNet | False |
 | `-v`, `-pbar`, `-nclass`, `-cpld_type`, `-cpld_n`, `-sv` | accepted, no effect (a note says so) | |
 
-cmbx adds `--inpaint`, `--frst`, `--csf_rule`, `--flair`, `--disc_model`, `--kd_temperature`, `--kd_alpha`, `--loss`,
+cmbx adds `--inpaint`, `--frst`, `--frst_from`, `--csf_rule`, `--flair`, `--disc_model`, `--kd_temperature`, `--kd_alpha`, `--loss`,
 `--patches`, `--seed`, `--device`, `--work_dir`, `--overwrite`, and `--config <yaml>` / `--set key=value` for every
 setting of the configuration (below). Case names follow MicrobleedNet: the file name before `-ir`; without `-f True`
 prefixed by the parent folder (`<folder>-<name>`).

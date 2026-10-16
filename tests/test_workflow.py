@@ -162,3 +162,54 @@ def test_cross_validate(cohort):
     out = str(tmp / "cv")
     main(["cross_validate", "-i", train, "-l", train, "-o", out, "-fold", "3", "--config", CFG, "-ep", "1", "--frst", "False"])
     assert os.path.exists(os.path.join(out, "summary.json")) and len(glob.glob(os.path.join(out, "fold*", "model.pt"))) == 3
+
+
+def test_inpaint_from_images_inpainted(tmp_path):
+    """--inpaint True on a cohort that carries MicrobleedNet's inpainted input in derivatives/images_inpainted."""
+    root = write_phantom_preprocessed(str(tmp_path / "c"), 2, 0, flair=False)
+    os.makedirs(os.path.join(root, "derivatives", "images_inpainted"))
+    for n in ("phantom-00", "phantom-01"):
+        d = os.path.join(root, "derivatives", "preprocessed", n)
+        im, br = nib.load(f"{d}/{n}_t2star.nii.gz"), np.asarray(nib.load(f"{d}/{n}_brainmask.nii.gz").dataobj) > 0
+        a = np.asarray(im.dataobj, np.float32) * br
+        nib.save(nib.Nifti1Image(((1 - a / a.max()) * br).astype(np.float32), im.affine),
+                 os.path.join(root, "derivatives", "images_inpainted", f"{n}_preproc.nii.gz"))
+    rows = collect(root, need_labels=True, inpaint=True, log=QUIET)
+    got = np.asarray(nib.load(rows[0]["image"]).dataobj)
+    d = os.path.join(root, "derivatives", "preprocessed", "phantom-00")
+    a = np.asarray(nib.load(f"{d}/phantom-00_t2star.nii.gz").dataobj) * (np.asarray(nib.load(f"{d}/phantom-00_brainmask.nii.gz").dataobj) > 0)
+    assert np.allclose(got, a / a.max(), atol=1e-5)
+
+
+def test_microbleednet_style_command(tmp_path):
+    """As MicrobleedNet: -i = the folder with images/ + frsts/, -l = the labels; the network gets the given FRST."""
+    root = write_phantom_preprocessed(str(tmp_path / "c"), 10, 0)
+    der = os.path.join(root, "derivatives")
+    m = str(tmp_path / "m")
+    main(["train", "-i", der, "-l", os.path.join(der, "preprocessed"), "-m", m, "--config", CFG, "-ep", "1"])
+    import yaml
+    c = yaml.safe_load(open(os.path.join(m, "config.yaml")))
+    assert c["train"]["channels"] == ["image", "frst_mbnet"] and c["preprocess"]["extra_channels"] == {"frst_mbnet": "frst_file"}
+    rows = collect(der, os.path.join(der, "preprocessed"), need_labels=True, log=QUIET)
+    assert all(r["frst_file"].endswith("_frst.nii.gz") and r["brain_mask"].endswith("_brainmask.nii.gz")
+               and r["label"].endswith("_cmb.nii.gz") for r in rows)
+    new = write_phantom_preprocessed(str(tmp_path / "n"), 2, 7, labels=False)
+    out = str(tmp_path / "p")
+    main(["evaluate", "-i", os.path.join(new, "derivatives"), "-m", m, "-o", out])
+    assert len(os.listdir(os.path.join(out, "final_predictions"))) == 2
+    m2 = str(tmp_path / "m2")                              # the cmbx FRST instead
+    main(["train", "-i", der, "-l", os.path.join(der, "preprocessed"), "-m", m2, "--config", CFG, "-ep", "1", "--frst_from", "cmbx"])
+    assert yaml.safe_load(open(os.path.join(m2, "config.yaml")))["train"]["channels"] == ["image", "frst"]
+
+
+def test_split_layout_inpainted(tmp_path):
+    """images/ = without inpainting, images_inpainted/ = with: --inpaint picks the folder and its FRSTs."""
+    root = write_phantom_preprocessed(str(tmp_path / "c"), 2, 0)
+    der = os.path.join(root, "derivatives")
+    import shutil
+    shutil.copytree(os.path.join(der, "images"), os.path.join(der, "images_inpainted"))
+    shutil.copytree(os.path.join(der, "frsts"), os.path.join(der, "frsts_inpainted"))
+    a = collect(der, os.path.join(der, "preprocessed"), inpaint=False, log=QUIET)
+    b = collect(der, os.path.join(der, "preprocessed"), inpaint=True, log=QUIET)
+    assert "/frsts/" in a[0]["frst_file"] and "/frsts_inpainted/" in b[0]["frst_file"]
+    assert a[0]["image"].endswith("_images.nii.gz") and b[0]["image"].endswith("_images_inpainted.nii.gz")

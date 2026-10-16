@@ -78,10 +78,11 @@ def write_phantom_dataset(out_dir: str, n_cases: int = 10, seed: int = 0, **kw) 
 
 
 def write_phantom_preprocessed(root: str, n_cases: int = 10, seed: int = 0, labels: bool = True, flair: bool = True,
-                               **kw) -> str:
+                               mbnet: bool = True, **kw) -> str:
     """Write ``n_cases`` phantoms as a cohort (README "Data"): ``<root>/derivatives/preprocessed/phantom-XX/`` with
     ``phantom-XX_t2star``, ``_brainmask``, ``_synthseg``, with labels=True ``_cmb``, with flair=True ``_flair`` (on
-    the scan matrix, other contrast), plus ``<root>/participants.tsv``. Returns the root."""
+    the scan matrix, other contrast), with mbnet=True ``derivatives/images/<id>_preproc`` (1 - I/max in the brain) and
+    ``derivatives/frsts/<id>_frst`` as in MicrobleedNet's layout, plus ``<root>/participants.tsv``. Returns the root."""
     prep = os.path.join(root, "derivatives", "preprocessed")
     ids = []
     for i in range(n_cases):
@@ -96,6 +97,15 @@ def write_phantom_preprocessed(root: str, n_cases: int = 10, seed: int = 0, labe
             b = np.asarray(ph["brain"].dataobj) > 0
             a = np.asarray(im.dataobj, np.float32)
             nib.save(nib.Nifti1Image(((a.max() - a) * b).astype(np.float32), im.affine), os.path.join(d, f"{sid}_flair.nii.gz"))
+        if mbnet:                                         # MicrobleedNet layout: inverted image + FRST (cmbx FRST here)
+            from .frst import frst_volume
+            im = ph["image"]
+            b = np.asarray(ph["brain"].dataobj) > 0
+            a = np.asarray(im.dataobj, np.float32) * b
+            inv = ((1 - a / a.max()) * b).astype(np.float32)
+            for sub, arr, suf in (("images", inv, "_preproc"), ("frsts", frst_volume(inv, b)[0], "_frst")):
+                os.makedirs(os.path.join(root, "derivatives", sub), exist_ok=True)
+                nib.save(nib.Nifti1Image(arr.astype(np.float32), im.affine), os.path.join(root, "derivatives", sub, f"{sid}{suf}.nii.gz"))
         ids.append(sid)
     with open(os.path.join(root, "participants.tsv"), "w") as f:
         f.write("participant_id\n" + "".join(f"{s}\n" for s in ids))

@@ -58,8 +58,8 @@ add(f'<rect width="{W}" height="{H}" fill="#ffffff"/>')
 # ---------------- preprocessing strip
 frame(20, 40, W - 40, 92, "Preprocessing (cmbx preprocess / train)")
 steps = [("scan + brain mask", "bias-corrected T2* or SWI"), ("vessel inpainting", "off; --inpaint True"),
-         ("0.5 x 0.5 x 1 mm grid", "cropped to the brain"), ("invert: 1 - I / max", "inside the brain mask"),
-         ("FRST", "radii 2, 3, 4, 6 voxels; --frst")]
+         ("0.5 x 0.5 x 1 mm grid", "cropped to the brain"), ("invert: 1 - I / max", "images/ as MicrobleedNet"),
+         ("FRST", "frsts/ (MicrobleedNet) or own; --frst")]
 for i, (a, b) in enumerate(steps):
     x = 40 + i * 226
     dashed = ' stroke-dasharray="5 3"' if "off" in b or "--frst" in b else ""
