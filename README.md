@@ -117,6 +117,7 @@ cmbx cross_validate -i examples/train/derivatives -l examples/train/derivatives/
 ```
 
 - Lesion-level F1 out of fold: `../my_runs/cv/summary.json`. Same folds for every setting you compare.
+- Five trainings of 60 epochs: about 1 h on one GPU even for the examples; `-ep 2` for a quick try.
 
 ## Differences to MicrobleedNet
 
