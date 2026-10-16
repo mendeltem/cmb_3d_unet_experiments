@@ -213,3 +213,13 @@ def test_split_layout_inpainted(tmp_path):
     b = collect(der, os.path.join(der, "preprocessed"), inpaint=True, log=QUIET)
     assert "/frsts/" in a[0]["frst_file"] and "/frsts_inpainted/" in b[0]["frst_file"]
     assert a[0]["image"].endswith("_images.nii.gz") and b[0]["image"].endswith("_images_inpainted.nii.gz")
+
+
+def test_holdout_keeps_microbleed_cases():
+    from cmbx.final import holdout_split
+    ids = [f"c{i}" for i in range(10)]
+    les = {s: (i % 4) for i, s in enumerate(ids)}             # like the phantoms: 3 of 10 without lesions
+    for seed in range(20):
+        tr, va = holdout_split(ids, 0.8, seed, les)
+        assert len(va) == 2 and not set(tr) & set(va) and any(les[s] for s in va)
+    assert holdout_split(ids, 1.0, 0, les) == (ids, [])

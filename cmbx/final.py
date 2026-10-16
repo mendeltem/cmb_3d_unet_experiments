@@ -47,16 +47,28 @@ def cv_cell(run_dir: str):
     return (float(t), int(m)), len(metas)
 
 
-def holdout_split(ids, train_prop: float, seed: int):
+def holdout_split(ids, train_prop: float, seed: int, lesions: Dict[str, int] = None):
     """(train ids, held-out ids): ``max(int(n * (1 - train_prop)), 1)`` cases held out (MicrobleedNet's count), drawn
-    with a fixed seed; none if train_prop >= 1."""
+    with a fixed seed; none if train_prop >= 1. With ``lesions`` (reference lesions per case) cases with and without
+    microbleeds are held out in proportion, at least one with microbleeds: a held-out set without any reference lesion
+    has F1 0 at every cell and cannot choose the threshold."""
     if float(train_prop) >= 1.0:
         return list(ids), []
-    n_val = max(int(len(ids) * (1.0 - float(train_prop))), 1)
+    n_val = max(int(len(ids) * (1.0 - float(train_prop)) + 1e-9), 1)
     if n_val >= len(ids):
         raise SystemExit(f"train_prop {train_prop}: no case left for training ({len(ids)} cases)")
-    pick = set(np.random.RandomState(seed).choice(len(ids), n_val, replace=False).tolist())
-    return [s for i, s in enumerate(ids) if i not in pick], [s for i, s in enumerate(ids) if i in pick]
+    rng = np.random.RandomState(seed)
+    if lesions:
+        pos = [s for s in ids if lesions.get(s, 0) > 0]
+        neg = [s for s in ids if lesions.get(s, 0) == 0]
+        k = min(max(1, int(round(n_val * len(pos) / len(ids)))), len(pos), n_val) if pos else 0
+        k = max(k, n_val - len(neg))
+        pick = set(rng.choice(pos, k, replace=False).tolist()) if k else set()
+        if n_val - k:
+            pick |= set(rng.choice(neg, n_val - k, replace=False).tolist())
+    else:
+        pick = {ids[i] for i in rng.choice(len(ids), n_val, replace=False)}
+    return [s for s in ids if s not in pick], [s for s in ids if s in pick]
 
 
 def _state(model):
@@ -73,14 +85,14 @@ def train_final(cfg: Dict, run_dir: str, log=print, overwrite: bool = False) -> 
         return json.load(open(os.path.join(out, "meta.json")))
     ids = [c["id"] for c in read_cases(cfg["data"]["cases"])]
     seed = int(T["seed"])
-    train_ids, val_ids = holdout_split(ids, T.get("train_prop", 1.0), seed)
+    csf = bool(PP["csf_rule"])
+    recs = {s: load_prepared(cfg["data"]["prepared_dir"], s, T["channels"], tissue=csf) for s in ids}
+    train_ids, val_ids = holdout_split(ids, T.get("train_prop", 1.0), seed, {s: len(recs[s].components) for s in ids})
     ckpt, every, patience = T.get("checkpoint", "last"), int(T.get("checkpoint_every", 10)), int(T.get("early_stop") or 0)
     if ckpt not in ("last", "best", "everyN"):
         raise SystemExit(f"train.checkpoint must be last, best or everyN; got {ckpt!r}")
     if not val_ids and (ckpt == "best" or patience):
         raise SystemExit("checkpoint 'best' and early stopping need held-out cases: set -tr_prop below 1 (e.g. 0.8)")
-    csf = bool(PP["csf_rule"])
-    recs = {s: load_prepared(cfg["data"]["prepared_dir"], s, T["channels"], tissue=csf and s in val_ids) for s in ids}
     cell, n_folds = cv_cell(run_dir)
     if cell is None and not val_ids:
         cell = DEFAULT_CELL
@@ -163,7 +175,12 @@ def train_final(cfg: Dict, run_dir: str, log=print, overwrite: bool = False) -> 
             log(f"[final] early stop after epoch {ep}: no held-out gain for {patience} epochs (best epoch {best['epoch']})")
             break
     model = unwrap(model)
-    if val_ids:
+    if val_ids and not any(len(recs[s].components) for s in val_ids):
+        if ckpt == "best":
+            model.load_state_dict(best["state"])
+        cell, cell_source = cell or DEFAULT_CELL, "default (the held-out cases have no reference lesion)"
+        log("WARNING: the held-out cases contain no reference microbleed; operating cell = default")
+    elif val_ids:
         chosen = best if ckpt == "best" else last_eval
         if ckpt == "best":
             model.load_state_dict(best["state"])
