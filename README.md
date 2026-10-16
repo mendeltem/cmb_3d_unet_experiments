@@ -20,6 +20,8 @@ Charité T2*-GRE and SWI cohorts; VALDO 2021 Task 2 works as a public example. D
 ## Install
 
 ```bash
+git clone https://github.com/mendeltem/cmb_3d_unet_experiments.git   # private: needs a GitHub token or SSH key
+cd cmb_3d_unet_experiments
 conda env create -f environment.yml && conda activate cmbx
 pip install -e .
 cmbx check-env      # driver, CUDA, GPU memory: says what is missing and which build fits
