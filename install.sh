@@ -34,6 +34,7 @@ if [ "$TORCH" = auto ]; then
     elif [ -e /dev/kfd ] || command -v rocminfo >/dev/null 2>&1; then TORCH=rocm; WHY="AMD GPU (ROCm)"
     else TORCH=cu124; WHY="no GPU visible here; the CUDA build also runs on the CPU and is ready for GPU nodes (--torch cpu: smaller download)"; fi
 fi
+[ -z "$WHY" ] && WHY="chosen with --torch"
 case "$TORCH" in
     cu124|cu118|cpu) TORCH_INDEX="--index-url https://download.pytorch.org/whl/$TORCH" ;;
     rocm) TORCH_INDEX="--index-url https://download.pytorch.org/whl/rocm6.2.4" ;;
@@ -61,7 +62,17 @@ else
     PYS=""; for p in python3.12 python3.11 python3.10 python3; do command -v $p >/dev/null && \
         $p -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null && { PYS=$p; break; }; done
     [ -n "$PYS" ] || { echo "no conda and no Python >= 3.10 found: install Miniforge (https://conda-forge.org/download)"; exit 1; }
-    [ -x .venv/bin/python ] || "$PYS" -m venv .venv
+    if [ ! -x .venv/bin/python ] || ! .venv/bin/python -m pip -V >/dev/null 2>&1; then
+        rm -rf .venv
+        if command -v uv >/dev/null 2>&1; then uv venv --seed --python "$PYS" .venv          # uv: fast, brings pip
+        elif "$PYS" -m venv .venv 2>/dev/null; then :
+        else   # e.g. Ubuntu without python3-venv (ensurepip missing): venv without pip, then pip via get-pip.py
+            rm -rf .venv; "$PYS" -m venv --without-pip .venv
+            say "no ensurepip in $PYS: fetching pip with get-pip.py"
+            curl -fsSL https://bootstrap.pypa.io/get-pip.py -o .venv/get-pip.py || wget -qO .venv/get-pip.py https://bootstrap.pypa.io/get-pip.py
+            .venv/bin/python .venv/get-pip.py --quiet && rm -f .venv/get-pip.py
+        fi
+    fi
     ENVP=$REPO/.venv
     printf '# written by install.sh: activate the cmbx environment (source env.sh)\nsource "%s/bin/activate"\n' "$ENVP" > env.sh
 fi
