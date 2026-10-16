@@ -5,6 +5,8 @@ Predict with a pretrained model, fine-tune it, or train on your own data. Python
 
 ![How it works](docs/architecture.svg)
 
+![3D U-Net](docs/unet.svg)
+
 ## Installing / Getting started
 
 ```bash
