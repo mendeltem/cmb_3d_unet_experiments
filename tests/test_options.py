@@ -57,12 +57,12 @@ def test_predict_outputs_on_input_grid(trained):
     tmp, run, cases = trained
     new = write_phantom_dataset(str(tmp / "new"), 2, 7)
     rows = list(csv.DictReader(open(new)))
-    lst = tmp / "unlabeled.csv"                       # what a user has for a new scan: no label column
+    lst = tmp / "unlabeled.csv"                       # what a user has for a new scan: image + brain mask, no label
     with open(lst, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["id", "image"])
+        w.writerow(["id", "image", "brain_mask"])
         for r in rows:
-            w.writerow([r["id"], os.path.join(tmp / "new", r["image"])])
+            w.writerow([r["id"], os.path.join(tmp / "new", r["image"]), os.path.join(tmp / "new", r["brain_mask"])])
     out = tmp / "pred"
     res = predict_run(run, str(lst), str(out), device="cpu", log=lambda *a: None)
     assert [r["id"] for r in res] == [r["id"] for r in rows]
@@ -90,7 +90,9 @@ def test_predict_single_image_and_errors(trained):
     res = predict_run(run, out=str(tmp / "one"), image=img, brain_mask=bm, case_id="scan1", device="cpu", log=lambda *a: None)
     assert res[0]["id"] == "scan1" and os.path.exists(tmp / "one" / "scan1_mask.nii.gz")
     with pytest.raises(SystemExit, match="tissue map"):
-        predict_run(run, out=str(tmp / "two"), image=img, csf_rule=True, device="cpu", log=lambda *a: None)
+        predict_run(run, out=str(tmp / "two"), image=img, brain_mask=bm, csf_rule=True, device="cpu", log=lambda *a: None)
+    with pytest.raises(SystemExit, match="brain mask is required"):
+        predict_run(run, out=str(tmp / "four"), image=img, device="cpu", log=lambda *a: None)
     with pytest.raises(SystemExit, match="not a finished run"):
         predict_run(str(tmp / "nope"), out=str(tmp / "three"), image=img, device="cpu", log=lambda *a: None)
 

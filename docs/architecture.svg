@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .box{fill:#ffffff;stroke:#94a3b8;stroke-width:1.5;rx:8}
+      .data{fill:#eff6ff;stroke:#3b82f6}
+      .train{fill:#f0fdf4;stroke:#22c55e}
+      .opt{fill:#fff7ed;stroke:#f97316;stroke-dasharray:5 3}
+      .out{fill:#faf5ff;stroke:#a855f7}
+      .t{font-size:14px;font-weight:700;fill:#0f172a}
+      .s{font-size:11.5px;fill:#334155}
+      .c{font-size:11px;fill:#64748b;font-family:Menlo, Consolas, monospace}
+      .h{font-size:16px;font-weight:700;fill:#0f172a}
+      .ln{stroke:#475569;stroke-width:1.6;fill:none;marker-end:url(#a)}
+      .skip{stroke:#94a3b8;stroke-width:1.3;fill:none;stroke-dasharray:4 3;marker-end:url(#a)}
+      .lvl{fill:#ecfdf5;stroke:#22c55e;stroke-width:1.3}
+      .lvl2{fill:#fff7ed;stroke:#f97316;stroke-width:1.3}
+    </style>
+  </defs>
+  <rect width="960" height="600" fill="#ffffff"/>
+
+  <text class="h" x="20" y="28">How it works</text>
+  <!-- row 1 -->
+  <rect class="box data" x="20" y="45" width="205" height="80" rx="8"/>
+  <text class="t" x="32" y="68">1  Your data (BIDS)</text>
+  <text class="s" x="32" y="88">bias-corrected T2* / SWI,</text>
+  <text class="s" x="32" y="104">brain mask, CMB mask</text>
+  <text class="c" x="32" y="119">examples/bids_train</text>
+
+  <rect class="box data" x="255" y="45" width="205" height="80" rx="8"/>
+  <text class="t" x="267" y="68">2  Case list</text>
+  <text class="s" x="267" y="88">one row per scan, 5 folds</text>
+  <text class="c" x="267" y="119">cmbx make-caselist</text>
+
+  <rect class="box train" x="490" y="45" width="205" height="80" rx="8"/>
+  <text class="t" x="502" y="68">3  Prepare</text>
+  <text class="s" x="502" y="88">0.5 x 0.5 x 1 mm grid,</text>
+  <text class="s" x="502" y="104">image + FRST channel</text>
+  <text class="c" x="502" y="119">cmbx prepare (automatic)</text>
+
+  <rect class="box train" x="725" y="45" width="215" height="80" rx="8"/>
+  <text class="t" x="737" y="68">4  5-fold CV</text>
+  <text class="s" x="737" y="88">3D U-Net per fold, threshold</text>
+  <text class="s" x="737" y="104">chosen on an inner fold</text>
+  <text class="c" x="737" y="119">cmbx run-experiment</text>
+
+  <!-- row 2 -->
+  <rect class="box train" x="725" y="165" width="215" height="80" rx="8"/>
+  <text class="t" x="737" y="188">5  Final model</text>
+  <text class="s" x="737" y="208">one U-Net on all cases</text>
+  <text class="c" x="737" y="239">runs/&lt;name&gt;/final</text>
+
+  <rect class="box opt" x="490" y="165" width="205" height="80" rx="8"/>
+  <text class="t" x="502" y="188">6  Stage 2 (optional)</text>
+  <text class="s" x="502" y="208">small 3D CNN re-checks</text>
+  <text class="s" x="502" y="224">every candidate</text>
+  <text class="c" x="502" y="239">cmbx stage2</text>
+
+  <rect class="box out" x="255" y="165" width="205" height="80" rx="8"/>
+  <text class="t" x="267" y="188">7  Predict</text>
+  <text class="s" x="267" y="208">masks + lesion list on the</text>
+  <text class="s" x="267" y="224">grid of the input scan</text>
+  <text class="c" x="267" y="239">cmbx predict</text>
+
+  <rect class="box opt" x="20" y="165" width="205" height="80" rx="8"/>
+  <text class="t" x="32" y="188">Pretrained (optional)</text>
+  <text class="s" x="32" y="208">VALDO U-Net: predict now,</text>
+  <text class="s" x="32" y="224">or fine-tune (init_from)</text>
+  <text class="c" x="32" y="239">models/valdo_t2</text>
+
+  <path class="ln" d="M225,85 L253,85"/>
+  <path class="ln" d="M460,85 L488,85"/>
+  <path class="ln" d="M695,85 L723,85"/>
+  <path class="ln" d="M832,125 L832,163"/>
+  <path class="ln" d="M725,205 L697,205"/>
+  <path class="ln" d="M490,205 L462,205"/>
+  <path class="ln" d="M225,205 L253,205"/>
+  <path class="skip" d="M122,165 C122,140 640,140 760,126"/>
+  <text class="s" x="300" y="152" font-style="italic">fine-tune: train.init_from=models/valdo_t2</text>
+
+  <!-- networks -->
+  <text class="h" x="20" y="300">Stage 1: anisotropic 3D U-Net (2 input channels: image, FRST; patch 38 x 62 x 94 voxels)</text>
+  <g>
+    <rect class="lvl" x="40" y="320" width="175" height="36" rx="6"/><text class="s" x="50" y="343">32 ch, 1x3x3 conv (in-plane)</text>
+    <rect class="lvl" x="100" y="372" width="150" height="36" rx="6"/><text class="s" x="110" y="395">64 ch, 3x3x3</text>
+    <rect class="lvl" x="140" y="424" width="150" height="36" rx="6"/><text class="s" x="150" y="447">128 ch, 3x3x3</text>
+    <rect class="lvl" x="180" y="476" width="150" height="36" rx="6"/><text class="s" x="190" y="499">256 ch, 3x3x3</text>
+    <rect class="lvl" x="290" y="528" width="160" height="36" rx="6"/><text class="s" x="300" y="551">512 ch bottleneck</text>
+    <rect class="lvl" x="590" y="320" width="150" height="36" rx="6"/><text class="s" x="600" y="343">32 ch, 1x3x3</text>
+    <rect class="lvl" x="550" y="372" width="150" height="36" rx="6"/><text class="s" x="560" y="395">64 ch</text>
+    <rect class="lvl" x="510" y="424" width="150" height="36" rx="6"/><text class="s" x="520" y="447">128 ch</text>
+    <rect class="lvl" x="470" y="476" width="150" height="36" rx="6"/><text class="s" x="480" y="499">256 ch</text>
+    <path class="ln" d="M120,356 L150,370"/><path class="ln" d="M160,408 L190,422"/><path class="ln" d="M200,460 L230,474"/><path class="ln" d="M250,512 L310,526"/>
+    <path class="ln" d="M430,528 L500,514"/><path class="ln" d="M560,476 L580,462"/><path class="ln" d="M600,424 L620,410"/><path class="ln" d="M640,372 L660,358"/>
+    <path class="skip" d="M215,338 L588,338"/><path class="skip" d="M250,390 L548,390"/><path class="skip" d="M290,442 L508,442"/><path class="skip" d="M330,494 L468,494"/>
+    <text class="s" x="345" y="332">skip connections</text>
+    <text class="s" x="14" y="343">in</text>
+    <path class="ln" d="M740,338 L770,338"/><text class="s" x="775" y="335">probability</text><text class="s" x="775" y="350">per voxel</text>
+    <text class="c" x="60" y="590">pooling 1x2x2 after the first level (keeps the thin slices), 2x2x2 below</text>
+  </g>
+  <g>
+    <rect class="lvl2" x="775" y="395" width="170" height="150" rx="8"/>
+    <text class="t" x="787" y="418">Stage 2 (optional)</text>
+    <text class="s" x="787" y="440">per candidate (p &gt; 0.15):</text>
+    <text class="s" x="787" y="456">16 x 32 x 32 block of</text>
+    <text class="s" x="787" y="472">image, FRST, probability</text>
+    <text class="s" x="787" y="492">CNN 16 / 32 / 64 ch</text>
+    <text class="s" x="787" y="508">-> microbleed yes/no</text>
+    <text class="s" x="787" y="528">3 members averaged</text>
+  </g>
+</svg>

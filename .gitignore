@@ -18,3 +18,5 @@ logs/
 env.sh
 .venv/
 models/
+pred/
+my_runs/

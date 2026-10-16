@@ -6,7 +6,7 @@ on the data (e.g. HD-BET or a scanner mask, then FSL ``fast -B`` on the brain-ex
 list points ``image`` at the bias-corrected volume.
 
   1. orientation: kept as in the file (``reorient: none``, VALDO grid) or ``as_closest_canonical`` (``ras``);
-  2. brain mask: the given one, else ``image > 0`` with holes filled (skull-stripped input such as VALDO);
+  2. brain mask: the given one (required; for skull-stripped input such as VALDO the binarised image);
      ``brain_mask_mode: mask_and_positive`` additionally drops voxels <= 0 of the image (for data whose mask
      reaches beyond the zero background);
   3. INPAINT HOOK (experiment entry point, off by default): ``inpaint(image, mask) -> image`` on the native grid,
@@ -264,7 +264,9 @@ def prepare_case(case: Dict, out_dir: str, pp: Dict, overwrite: bool = False) ->
             raise ValueError(f"{sid}: {os.path.basename(path)} has a different orientation/voxel size than the image")
         return im
 
-    mask = brain_mask(image, same_grid(case["brain_mask"]) if case.get("brain_mask") else None)
+    if not case.get("brain_mask"):
+        raise ValueError(f"{sid}: no brain mask; it is required (case-list column brain_mask, predict --brain-mask)")
+    mask = brain_mask(image, same_grid(case["brain_mask"]))
     label = (_squeeze(np.asarray(same_grid(case["label"]).dataobj)) > 0).astype(np.uint8) if case.get("label") \
         else np.zeros(image.shape, np.uint8)
     corrected = image                               # the input IS the bias-corrected image (done outside)

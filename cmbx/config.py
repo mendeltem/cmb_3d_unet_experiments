@@ -75,6 +75,12 @@ DEFAULTS: Dict[str, Any] = {
         "max_component_voxels": 2100,            # clump guard: > 10 mm sphere is not a microbleed
     },
     "predict": {"batch_size": 8, "tta_flip": False},
+    "stage2": {                                  # OPTIONAL second stage: 3D CNN re-checks every candidate (cmbx/stage2.py)
+        "enabled": False,                        # true: run-experiment trains it after the CV (also: cmbx stage2 <run>)
+        "init_from": None,                       # fine-tune from a classifier (run folder, classifier.pt, models/cmb_classifier)
+        "low_threshold": 0.15, "min_voxels": 4, "max_voxels": 2100,
+        "members": 3, "epochs": 40, "batch_size": 16, "lr": 1.0e-3, "weight_decay": 1.0e-3,
+    },
     "postprocess": {
         "csf_rule": False,                       # drop components whose majority SynthSeg label is CSF
         "csf_labels": [4, 5, 14, 15, 24, 43, 44],

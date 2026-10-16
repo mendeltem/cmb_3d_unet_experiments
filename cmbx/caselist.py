@@ -135,7 +135,7 @@ def bids_patterns(root: str) -> Dict[str, str]:
     """Patterns of the recommended BIDS layout under ``root``; tissue maps / ids only if their folder / file exists."""
     root = os.path.abspath(root)
     out = {k: v.replace("{root}", root) for k, v in BIDS.items()}
-    for key, folder in (("tissue_map", "synthseg"), ("label", "manual-cmb"), ("brain_mask", "brainmask")):
+    for key, folder in (("tissue_map", "synthseg"), ("label", "manual-cmb")):          # brain masks are required
         if not os.path.isdir(os.path.join(root, "derivatives", folder)):      # e.g. no references: inference data
             out.pop(key)
     if not os.path.exists(out["ids"]):
@@ -147,6 +147,8 @@ def build_caselist(image: str, label: Optional[str] = None, brain_mask: Optional
                    tissue_map: Optional[str] = None, raw: Optional[str] = None, ids_file: Optional[str] = None,
                    exclude: Optional[List[str]] = None, n_folds: int = 5, fold_seed: int = 0, folds: bool = True,
                    quality_checks: bool = True, report_dir: Optional[str] = None, log=print) -> List[Dict]:
+    if not brain_mask:
+        raise SystemExit("a brain mask is required: give --brain-mask <pattern with {id}> (or --bids with derivatives/brainmask)")
     ids = read_ids(ids_file) if ids_file else ids_from_pattern(image)
     excluded = set().union(*[set(read_ids(p)) for p in exclude]) if exclude else set()
     log(f"{len(ids)} case ids from {ids_file or 'the --image pattern'}; {len(excluded & set(ids))} left out by "

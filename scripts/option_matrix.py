@@ -62,7 +62,7 @@ run("evaluate crossfold --csf-rule --tag", ["evaluate", "runs/baseline", "--mode
 run("train-final", ["train-final", f"{C}/baseline.yaml", "--set", *data_set("base"), *TINY], ["runs/baseline/final/model.pt"])
 run("compare", ["compare", "runs"], ["runs/summary.csv"])
 run("predict final (unlabeled)", ["predict", "--run", "runs/baseline", "--cases", "new/unlabeled.csv", "--out", "pred1"], ["pred1/phantom-00_mask.nii.gz"])
-run("predict image only (no mask column)", ["predict", "--run", "runs/baseline", "--cases", "new/image_only.csv", "--out", "pred2"], ["pred2/phantom-00_mask.nii.gz"])
+run("predict without brain mask -> clean error", ["predict", "--run", "runs/baseline", "--cases", "new/image_only.csv", "--out", "pred2"], ok_rc=1)
 run("predict --folds", ["predict", "--run", "runs/baseline", "--cases", "new/unlabeled.csv", "--out", "pred3", "--folds"], ["pred3/phantom-00_mask.nii.gz"])
 run("predict thr/min/csf", ["predict", "--run", "runs/baseline", "--cases", "ph/cases.csv", "--out", "pred4", "--threshold", "0.3", "--min-size", "1", "--csf-rule"], ["pred4/phantom-00_mask.nii.gz"])
 run("predict --device cpu", ["predict", "--run", "runs/baseline", "--cases", "new/unlabeled.csv", "--out", "pred5", "--device", "cpu"], ["pred5/phantom-00_mask.nii.gz"])
@@ -82,7 +82,7 @@ for cfg, extra in [("no_frst", []), ("csf_rule", []), ("extra_channel_example", 
         run(f"  predict with {name}", ["predict", "--run", f"runs/{name}", "--cases", "ph/cases.csv" if name in ("extra_channel_example", "inpaint_mean") else "new/unlabeled.csv", "--out", f"pred_{name}"], [f"pred_{name}/phantom-00_mask.nii.gz"])
 r0 = rows[0]
 run("predict --image single scan", ["predict", "--run", "runs/baseline", "--image", os.path.join(W, "ph", r0["image"]), "--brain-mask", os.path.join(W, "ph", r0["brain_mask"]), "--id", "one", "--out", "pred_one"], ["pred_one/one_mask.nii.gz", "pred_one/predictions.csv"])
-run("predict --image + --tissue-map --csf-rule", ["predict", "--run", "runs/baseline", "--image", os.path.join(W, "ph", r0["image"]), "--tissue-map", os.path.join(W, "ph", r0["tissue_map"]), "--csf-rule", "--out", "pred_csf1"], ["pred_csf1/predictions.csv"])
+run("predict --image + --tissue-map --csf-rule", ["predict", "--run", "runs/baseline", "--image", os.path.join(W, "ph", r0["image"]), "--brain-mask", os.path.join(W, "ph", r0["brain_mask"]), "--tissue-map", os.path.join(W, "ph", r0["tissue_map"]), "--csf-rule", "--out", "pred_csf1"], ["pred_csf1/predictions.csv"])
 run("predict --grid-only", ["predict", "--run", "runs/baseline", "--cases", "new/unlabeled.csv", "--out", "pred_grid", "--grid-only"], ["pred_grid/grid/phantom-00_mask.nii.gz"])
 run("cv --folds 3 (single fold rerun is skipped)", ["cv", "--config", f"{C}/baseline.yaml", "--set", *data_set("base"), *TINY, "--folds", "3"])
 # error handling: should fail cleanly (rc != 0, readable message, no traceback)

@@ -1,151 +1,144 @@
 # cmb_3d_unet_experiments
+> Find cerebral microbleeds on T2* and SWI MRI with a 3D U-Net.
 
-5-fold cross-validation of our best cerebral-microbleed (CMB) detector (anisotropic 3D U-Net `a03-aniso` from
-[cmb-valdo-chain](https://github.com/mendeltem/cmb-valdo-chain)) on **your own data**, and a framework to test
-**pre- and post-processing variants**, one YAML file per experiment. Package: `cmbx`. Works on any T2*-GRE or SWI
-dataset with reference CMB masks (nothing dataset-specific is built in); VALDO 2021 Task 2 is a public example.
-Details: [docs/DETAILS.md](docs/DETAILS.md).
+Predict with a pretrained model, fine-tune it, or train on your own data. Python package `cmbx`.
 
-> **Patient data never go into this repository** (no images, masks, case lists with paths, predictions, weights,
-> per-case tables). Keep case lists, configs for your data and all outputs outside the repo, e.g. in `../my_runs/`.
+![How it works](docs/architecture.svg)
 
-## Install
+## Installing / Getting started
 
 ```bash
 git clone https://github.com/mendeltem/cmb_3d_unet_experiments.git
+```
+
+```bash
 cd cmb_3d_unet_experiments
-./install.sh        # ~5 min: Python env + the PyTorch build for this machine + cmbx, then runs test.py
-source env.sh       # activates the environment (in every new shell)
-python test.py      # any time: does everything work here? (~1 min)
 ```
 
-`install.sh` uses conda/mamba if available (otherwise a venv in `.venv`) and picks PyTorch for the hardware:
-NVIDIA (driver >= 525: CUDA 12.4, 450-524: CUDA 11.8), AMD (ROCm), Apple Silicon and ARM (PyPI build), or no GPU
-(the CUDA build, which also runs on the CPU, e.g. on a cluster login node). No CUDA toolkit is needed, only the GPU
-driver. Behind a proxy export `http_proxy` / `https_proxy` first; `./install.sh --help` lists the options
-(`--torch cpu|cu118|...`, `--name`, `--prefix`, `--venv`, `--recreate` = build the environment new). Manual alternative: `environment.yml`, see docs/DETAILS.md.
-
-`test.py` checks the packages, every device present (CPU, CUDA/ROCm, MPS), every registered network (forward +
-backward) and a 5-fold CV + final model on synthetic phantoms. A missing GPU is reported, not a failure; real
-training needs a GPU with >= 2 GB memory (one training: ~1.8 GiB) and >= 32 GB RAM. Full test suite: `pytest -q`.
-
-## Pretrained model: inference right away, or fine-tuning
-
-`./install.sh` also downloads `models/valdo_t2` (or `cmbx get-model valdo_t2`): this U-Net trained on all 72 cases of
-the public VALDO 2021 challenge (T2*-GRE), as a run folder that `predict` and `init_from` understand.
 ```bash
-cmbx predict --run models/valdo_t2 --image scan.nii.gz --brain-mask mask.nii.gz --out pred/    # bias-corrected T2*
-cmbx run-experiment ../my_runs/my_baseline.yaml --set train.init_from=models/valdo_t2 train.lr=0.0001   # fine-tune
-cmbx run-experiment ../my_runs/my_baseline.yaml --set train.init_from=models/valdo_t2 \
-    "train.channels=[image,frst,myvessel]"     # other channels: matched by name, a new one starts at zero weight
+./install.sh
 ```
-Without adaptation it is a starting point, not the final word: on an unseen in-house T2* cohort (75 cases) it reached
-a pooled lesion F1 of 0.47 at its default cell (0.56 with threshold 0.9, chosen on those cases), against 0.67 for a
-model trained there; it is clearly worse on SWI. Fine-tuning pays: on one fold of that cohort, 6 epochs from these
-weights with `train.lr=0.0001` (7 min on one GPU) gave F1 0.66, against 0.55 for 6 epochs and 0.63 for 60 epochs from
-scratch (one fold, one seed; seed noise is about +-0.03 to 0.08).
-Licence of the weights: CC BY-NC-SA 4.0 (non-commercial; cite the VALDO paper), see `models/valdo_t2/MODEL_CARD.md`.
 
-## Data (BIDS layout)
+- Installs Python, PyTorch for your GPU, `cmbx` and the pretrained model `models/valdo_t2`.
+- Ends with `ALL REQUIRED CHECKS PASSED`.
 
-Brain extraction and bias-field correction are **not** part of this repository: they are done once, uniformly, on
-the data. Put each dataset into this BIDS layout (synthetic examples in the repository: `examples/bids_train`,
-`examples/bids_new`; `cmbx make-phantoms <dir> --bids` writes another):
+```bash
+source env.sh
+```
+
+- Activates the environment. Run it again in every new shell.
+
+## Predict with the pretrained model
+
+```bash
+cmbx predict --run models/valdo_t2 --image examples/bids_new/derivatives/biascorr/sub-001/anat/sub-001_T2starw_desc-biascorr_T2starw.nii.gz --brain-mask examples/bids_new/derivatives/brainmask/sub-001/anat/sub-001_T2starw_desc-brain_mask.nii.gz --out ../my_runs/pred
+```
+
+- Writes the microbleed mask, a labelled lesion map, `sub-001_T2starw_desc-biascorr_T2starw.json` (one entry per
+  microbleed) and `predictions.csv` to `../my_runs/pred`.
+- Your scan: replace `--image` (bias-corrected T2*) and `--brain-mask`.
+
+## Train on your data
+
+Data layout (as in `examples/bids_train`):
 
 ```
-my_dataset/                                      for TRAINING (examples/bids_train)
-├── participants.tsv                             participant_id column = the case ids
-├── dataset_description.json
-├── sub-001/anat/sub-001_T2starw.nii.gz          raw scan (SWI: sub-001_acq-swi_T2starw.nii.gz)
+my_dataset/
+├── participants.tsv
 └── derivatives/
-    ├── biascorr/sub-001/anat/sub-001_T2starw_desc-biascorr_T2starw.nii.gz   bias-corrected scan  (required)
-    ├── brainmask/sub-001/anat/sub-001_T2starw_desc-brain_mask.nii.gz        brain mask           (recommended)
-    ├── manual-cmb/sub-001/anat/sub-001_T2starw_desc-cmb_mask.nii.gz         reference CMB mask   (training only)
-    └── synthseg/sub-001/anat/sub-001_T2starw_dseg.nii.gz                    SynthSeg labels      (optional, CSF rule)
-
-new_scans/                                       for INFERENCE (examples/bids_new): the same without manual-cmb/
+    ├── biascorr/sub-001/anat/sub-001_T2starw_desc-biascorr_T2starw.nii.gz
+    ├── brainmask/sub-001/anat/sub-001_T2starw_desc-brain_mask.nii.gz
+    └── manual-cmb/sub-001/anat/sub-001_T2starw_desc-cmb_mask.nii.gz
 ```
 
-| | training (`run-experiment`) | inference (`predict`) |
+```bash
+DATA=/path/to/my_dataset
+```
+
+```bash
+RUNS=../my_runs
+```
+
+```bash
+cmbx make-caselist --bids $DATA --out $RUNS/cases.csv
+```
+
+- Writes the case list with 5 folds and reports missing files or suspicious masks.
+
+```bash
+cmbx run-experiment configs/baseline.yaml --set name=my_run output_root=$RUNS/runs data.cases=$RUNS/cases.csv data.prepared_dir=$RUNS/prepared data.splits=$RUNS/splits.json
+```
+
+- Trains and tests 5 models (cross-validation), then one final model on all cases (about 3 h on one GPU).
+- Score: `$RUNS/runs/my_run/summary.json`. Model: `$RUNS/runs/my_run/final/model.pt`.
+
+Fine-tune the pretrained model instead (minutes, usually better):
+
+```bash
+cmbx run-experiment configs/baseline.yaml --set name=my_finetune output_root=$RUNS/runs data.cases=$RUNS/cases.csv data.prepared_dir=$RUNS/prepared data.splits=$RUNS/splits.json train.init_from=models/valdo_t2 train.lr=0.0001
+```
+
+Optional second stage, a 3D classifier that re-checks every candidate:
+
+```bash
+cmbx stage2 $RUNS/runs/my_run
+```
+
+- Trained on the run's cross-validation output; `predict` uses it automatically from then on.
+
+## Predict with your model
+
+```bash
+cmbx predict --run $RUNS/runs/my_run --image /path/to/scan.nii.gz --brain-mask /path/to/brainmask.nii.gz --out $RUNS/pred
+```
+
+## SLURM
+
+```bash
+mkdir -p logs
+```
+
+```bash
+sbatch scripts/slurm_run_experiment.sbatch configs/baseline.yaml name=my_run output_root=$RUNS/runs data.cases=$RUNS/cases.csv data.prepared_dir=$RUNS/prepared data.splits=$RUNS/splits.json
+```
+
+- Same as `run-experiment` above, as a job on a GPU share; output in `logs/`.
+
+## Features
+
+- 5-fold cross-validation with honest scores and a final model.
+- Pretrained VALDO model for direct use or fine-tuning.
+- Optional second-stage 3D classifier.
+- Masks and lesion lists on the grid of the input scan.
+- Experiments by config: input channels, losses, inpainting, CSF rule.
+
+## Configuration
+
+Add any of these to `--set` (all options: [docs/DETAILS.md](docs/DETAILS.md)):
+
+| key | default | |
 |---|---|---|
-| `derivatives/biascorr` | required | required |
-| `derivatives/brainmask` | recommended (else `image > 0`) | recommended (else `image > 0`) |
-| `derivatives/manual-cmb` | required | not needed |
-| `derivatives/synthseg` | only for the CSF rule | only for `--csf-rule` |
+| `train.epochs` | `60` | training length |
+| `train.init_from` | none | start from a trained model, e.g. `models/valdo_t2` |
+| `train.lr` | `0.0003` | learning rate; `0.0001` for fine-tuning |
+| `stage2.enabled` | `false` | train the second stage inside `run-experiment` |
+| `train.device` | `auto` | `cuda`, `cpu` |
 
-All masks on the matrix of their scan. One line makes the case list (ids from `participants.tsv`; folders that are
-missing are skipped; leave cases out with `--exclude ids.txt`):
+## Links
 
-```bash
-cmbx make-caselist --bids examples/bids_train --out ../my_runs/cases.csv               # training
-cmbx make-caselist --bids examples/bids_new --no-folds --out ../my_runs/new/cases.csv  # inference
-```
-Other layouts: path patterns instead of `--bids`, e.g. `--image "/data/{id}/{id}_t2s_corrected.nii.gz" --label ...
---brain-mask ...` (any `{id}` pattern with `*`; docs/DETAILS.md). The tool also reports missing inputs and suspicious
-reference masks.
+- Details, results, validation: [docs/DETAILS.md](docs/DETAILS.md)
+- Issues: https://github.com/mendeltem/cmb_3d_unet_experiments/issues
+- Pretrained weights: https://github.com/mendeltem/microbleed_detection_3D_UNET/releases/tag/v0.1.0
 
-## Run
+## Licensing
 
-The whole workflow on the synthetic BIDS example (about 20 s on a GPU, 2.5 min on a CPU; the cross-validation
-finds the 13 phantom microbleeds; the numbers say nothing about real data):
-```bash
-cmbx make-caselist --bids examples/bids_train --out ../my_runs/example/cases.csv
-cmbx run-experiment configs/example.yaml --set output_root=../my_runs/example/runs data.cases=../my_runs/example/cases.csv \
-    data.prepared_dir=../my_runs/example/prepared data.splits=../my_runs/example/splits.json
-cmbx make-caselist --bids examples/bids_new --no-folds --out ../my_runs/example/new/cases.csv
-cmbx predict --run ../my_runs/example/runs/example --cases ../my_runs/example/new/cases.csv --out ../my_runs/example/pred
-```
-Your data, real training:
-```bash
-cp configs/baseline.yaml ../my_runs/my_baseline.yaml   # set name, output_root and the data paths:
-#   data: {cases: ../my_runs/cases.csv, prepared_dir: ../my_runs/prepared, splits: ../my_runs/splits.json}
-cmbx run-experiment ../my_runs/my_baseline.yaml       # prepare -> split -> 5-fold CV -> evaluation -> final model
-cmbx compare ../my_runs/runs                          # all runs side by side -> summary.csv
-cmbx predict --run <run folder> --image scan.nii.gz --out pred/     # apply the final model to a new scan
-cmbx predict --run <run folder> --cases ../my_runs/new/cases.csv --out pred/   # ... or to a case list
-```
-Per run: `summary.json` = the CV score (pooled lesion-level F1, precision, sensitivity, FP per case, per-case F1) and
-**`final/model.pt` = one model trained on all cases**, the model to keep and use (`--no-final` skips it;
-`cmbx train-final <config>` makes it later). Time on one GPU: CV ~2.3 h + final model ~0.5 h for 60 epochs.
-Validated on two in-house cohorts (T2*-GRE 75 cases, SWI 61 cases): reference pooled F1 **0.665** / **0.630**
-(seed noise about +-0.03); this package reproduced 0.644 on the T2* cohort.
-`predict` writes the masks on the **input image grid** (`<id>_mask.nii.gz`, `<id>_prob.nii.gz`, label map
-`<id>_lesions.nii.gz`), a list of the
-microbleeds per scan (`<id>.json`: volume, probability, position) and `predictions.csv`; options (`--folds`,
-`--threshold`, `--csf-rule`, losses, channels, inpainting, ...): docs/DETAILS.md.
+- Code: MIT. Pretrained VALDO weights: CC BY-NC-SA 4.0 (non-commercial).
+- Cite VALDO: Sudre et al., Med Image Anal 2024, doi:10.1016/j.media.2023.103029.
+- Patient data never go into this repository; keep data and outputs outside it.
 
-## Experiments = config files
+## Hardware
 
-A config lists only what differs from the defaults (= the winning recipe). Copy one, change `name` and the keys
-you want to vary, then `cmbx run-experiment your.yaml`.
-
-| config | tests |
-|---|---|
-| `baseline.yaml` | the winning recipe; copy it for your data (set the `data` paths and `output_root`) |
-| `example.yaml` | small and fast, for the synthetic BIDS example (quick start) |
-| `no_frst.yaml` | without the FRST channel (`train.channels: [image]`) |
-| `extra_channel_example.yaml` | an **own extra input channel** (e.g. vesselness, FLAIR): `preprocess.extra_channels: {name: column}`, then `train.channels: [image, frst, name]` or `[image, name]` |
-| `csf_rule.yaml` | drop candidates in CSF (needs a SynthSeg map per case) |
-| `inpaint_example.yaml` | paint over a mask before training (hook for own inpainting methods) |
-
-Post-processing variants without retraining: `cmbx evaluate <run> --mode crossfold --csf-rule`.
-
-## HPC (SLURM)
-
-Install once on the login node, inside `tmux` (a dropped SSH session then does not stop it): `./install.sh`, or
-`./install.sh --venv` (Python of the active conda base + pip, no conda download; if `conda create` fails the script
-falls back to this by itself). Then check a GPU node (~1 min, synthetic phantoms, no data):
-```bash
-mkdir -p logs && sbatch scripts/slurm_quick_test.sbatch && squeue --me      # result in logs/cmbx_quick_<job>.out
-```
-A real run (one training needs ~1.8 GiB, so a GPU share is enough where the cluster offers `shard`; resubmitting
-continues where it stopped):
-```bash
-sbatch scripts/slurm_run_experiment.sbatch ../my_runs/my_baseline.yaml         # [key=value ...] overrides
-```
-Use the partition / GRES names of your cluster (`sinfo -o "%P %G"`); without shards use `--gres=gpu:1`.
-
-## License
-
-Code MIT. Data and weights are not part of the repository. Cite cmb-valdo-chain (mendeltem, 2026) and, for the
-FRST, Loy & Zelinsky 2003 (doi:10.1109/TPAMI.2003.1217601); VALDO: Sudre et al. 2024 (doi:10.1016/j.media.2023.103029).
+- GPU: NVIDIA or AMD with 2 GB memory or more; a CPU works, but training is slow.
+- RAM: 32 GB for training.
+- Only the GPU driver is needed, no CUDA toolkit.
+- Time on one GPU: training about 3 h, fine-tuning minutes, prediction seconds per scan.

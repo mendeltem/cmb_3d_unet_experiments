@@ -3,6 +3,7 @@
   cmbx make-phantoms data/phantoms --n 10              synthetic cases + case list, to try everything without data
   cmbx make-caselist --image "<dir>/{id}/..." --label ... --out <csv>    case list from any layout (patterns)
   cmbx get-model valdo_t2                              pretrained VALDO model -> models/valdo_t2 (predict right away)
+  cmbx stage2 runs/<run> [--init <classifier>]         optional second stage: 3D classifier on the candidates
   cmbx check-env                                       torch/CUDA etc.: what is there, what is missing
   cmbx prepare --config configs/baseline.yaml          native images -> 0.5 x 0.5 x 1 mm grid + FRST (+ tissue map)
   cmbx split --config configs/baseline.yaml            stratified fold assignment -> data/splits.json
@@ -61,6 +62,12 @@ def cmd_make_caselist(a):
             r["fold"] = ""
     write_caselist(rows, a.out)
     _log(f"case list with {len(rows)} cases -> {a.out}")
+
+
+def cmd_stage2(a):
+    from .stage2 import train_stage2
+    ov = dict(epochs=a.epochs, members=a.members, lr=a.lr)
+    train_stage2(a.run, a.device, a.init, ov, _log)
 
 
 def cmd_get_model(a):
@@ -132,7 +139,8 @@ def cmd_compare(a):
 def cmd_predict(a):
     from .predict_cli import predict_run
     predict_run(a.run, a.cases, a.out, a.threshold, a.min_size, a.device, a.csf_rule, _log, use_folds=a.folds,
-                image=a.image, brain_mask=a.brain_mask, tissue_map=a.tissue_map, case_id=a.id, native=not a.grid_only)
+                image=a.image, brain_mask=a.brain_mask, tissue_map=a.tissue_map, case_id=a.id, native=not a.grid_only,
+                stage2=a.stage2, no_stage2=a.no_stage2)
 
 
 def main(argv=None):
@@ -167,6 +175,15 @@ def main(argv=None):
     p.add_argument("--no-quality-checks", action="store_true", help="skip the mask-fit / header-offset report")
     p.add_argument("--no-folds", action="store_true", help="leave folds empty (cmbx split computes them)")
     p.set_defaults(fn=cmd_make_caselist)
+
+    p = sub.add_parser("stage2", help="train (or fine-tune) the optional second-stage 3D classifier of a finished run")
+    p.add_argument("run", help="run folder with finished CV folds (their out-of-fold maps are the training data)")
+    p.add_argument("--init", default=None, help="fine-tune from a classifier: run folder, classifier.pt or models/cmb_classifier")
+    p.add_argument("--epochs", type=int, default=None)
+    p.add_argument("--members", type=int, default=None)
+    p.add_argument("--lr", type=float, default=None)
+    p.add_argument("--device", default="auto")
+    p.set_defaults(fn=cmd_stage2)
 
     p = sub.add_parser("get-model", help="download a pretrained model (public data only) as a run folder for predict")
     p.add_argument("name", nargs="?", help="e.g. valdo_t2 (--list shows all)")
@@ -233,7 +250,7 @@ def main(argv=None):
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--cases", help="case list: id, image [, brain_mask, tissue_map, extra channel columns]")
     src.add_argument("--image", help="one scan (NIfTI) instead of a case list")
-    p.add_argument("--brain-mask", default=None, help="with --image: brain mask on the image matrix (default: image > 0)")
+    p.add_argument("--brain-mask", default=None, help="with --image: brain mask on the image matrix (required)")
     p.add_argument("--tissue-map", default=None, help="with --image: SynthSeg map, needed for --csf-rule")
     p.add_argument("--id", default=None, help="with --image: case id for the output names (default: file name)")
     p.add_argument("--out", required=True)
@@ -243,6 +260,9 @@ def main(argv=None):
     p.add_argument("--csf-rule", action="store_true", help="drop detections in CSF (needs tissue maps)")
     p.add_argument("--folds", action="store_true", help="use the 5 fold models (mean probability) instead of the final model")
     p.add_argument("--grid-only", action="store_true", help="skip the outputs on the input image grid")
+    p.add_argument("--stage2", default=None, help="second-stage classifier to apply (run folder, classifier.pt, "
+                                                   "models/cmb_classifier); default: the run's own stage2/ if it exists")
+    p.add_argument("--no-stage2", action="store_true", help="first stage only, even if the run has a second stage")
     p.set_defaults(fn=cmd_predict)
 
     a = ap.parse_args(argv)

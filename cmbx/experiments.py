@@ -119,7 +119,17 @@ def run_experiment(cfg: Dict, folds=None, workers: Optional[int] = None, log=pri
     if final and len(metas) == split["n_folds"]:      # the model to keep: trained on ALL cases (cmbx/final.py)
         from .final import train_final
         train_final(cfg, run_dir, log)
-    elif final:
+    if (cfg.get("stage2") or {}).get("enabled") and len(metas) == split["n_folds"]:
+        from .stage2 import train_stage2
+        st2 = os.path.join(run_dir, "stage2", "classifier.pt")
+        if os.path.exists(st2):
+            log(f"stage 2 exists: {st2}")
+        else:
+            try:                                      # the first stage is done and stays usable whatever happens here
+                train_stage2(run_dir, cfg["train"]["device"], cfg["stage2"].get("init_from"), log=log)
+            except SystemExit as e:
+                log(f"WARNING: stage 2 not trained: {e}")
+    if final and len(metas) < split["n_folds"]:
         log(f"final model not trained yet: it takes its cell from all {split['n_folds']} CV folds ({len(metas)} done); "
             "run the remaining folds (same command without --folds) or `cmbx train-final <config>` now")
     return s

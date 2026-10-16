@@ -37,6 +37,22 @@ REGISTRY: Dict[str, Dict] = {
                 "research software, not a medical device",
         overrides={"preprocess": {"reorient": "none", "brain_mask_mode": "mask"},
                    "train": {"channels": ["image", "frst"]}, "model": {"name": "aniso_unet3d", "base_channels": 32}}),
+    "cmb_classifier": dict(
+        kind="stage2",
+        url="https://github.com/mendeltem/microbleed_detection_3D_UNET/releases/download/v0.1.0/",
+        files=[("classifier.pt", "45b1773b27745f932182c74d277a5cbe91c7069f4a7c3b81f04b9868ac3e9cce", None)],
+        sequence="T2*-GRE and SWI (second stage: re-checks the candidates of any first-stage run)",
+        trained_on="pooled out-of-fold candidates of VALDO and two in-house clinical cohorts (T2* and SWI), "
+                   "2230 candidates, 3 members, 40 epochs",
+        licence="research use only, non-commercial; derived from clinical data (no patient data in the weights), "
+                "released by the author with microbleed_detection_3D_UNET v0.1.0",
+        cite="microbleed_detection_3D_UNET v0.1.0 (mendeltem, 2026); VALDO: Sudre et al., Med Image Anal 2024, "
+             "doi:10.1016/j.media.2023.103029",
+        threshold=0.3, min_size=4,
+        cell_note="accepts a candidate at classifier score >= 0.3; candidates = components above 0.15, >= 1 mm3",
+        caveats="optional: use with --stage2 models/cmb_classifier, or fine-tune with cmbx stage2 <run> --init "
+                "models/cmb_classifier; not downloaded by install.sh",
+        overrides={}),
 }
 
 
@@ -69,6 +85,23 @@ def get_model(name: str, out_dir: str = "models", log=print, registry: Dict = No
         raise SystemExit(f"unknown model {name!r}; available: {sorted(reg)}")
     m = reg[name]
     run = os.path.join(out_dir, name)
+    if m.get("kind") == "stage2":                      # a second-stage classifier: <dir>/<name>/stage2/classifier.pt
+        fname, sha, _ = m["files"][0]
+        d = os.path.join(run, "stage2")
+        os.makedirs(d, exist_ok=True)
+        target = os.path.join(d, "classifier.pt")
+        if not (os.path.exists(target) and _sha256(target) == sha):
+            _download(m["url"] + fname, target, log)
+            if _sha256(target) != sha:
+                os.remove(target)
+                raise SystemExit(f"{fname}: SHA-256 mismatch; download again")
+        with open(os.path.join(run, "MODEL_CARD.md"), "w") as f:
+            f.write(f"# {name}\n\n| | |\n|---|---|\n| role | {m['sequence']} |\n| trained on | {m['trained_on']} |\n"
+                    f"| operating rule | {m['cell_note']} |\n| use | {m['caveats']} |\n| licence | {m['licence']} |\n"
+                    f"| cite | {m['cite']} |\n| file | {fname} (SHA-256 checked), from {m['url']} |\n")
+        log(f"{name} ready in {run} (licence: research use only); use: cmbx predict ... --stage2 {run}  or  "
+            f"cmbx stage2 <run> --init {run}")
+        return run
     for k, (fname, sha, seed) in enumerate(m["files"]):
         d = os.path.join(run, f"fold{k}")
         os.makedirs(d, exist_ok=True)

@@ -92,9 +92,15 @@ def _load_models(run_dir, use_folds, device):
 
 
 def predict_run(run_dir, cases_path=None, out="pred", threshold=None, min_size=None, device="auto", csf_rule=False,
-                log=print, use_folds=False, image=None, brain_mask=None, tissue_map=None, case_id=None, native=True):
+                log=print, use_folds=False, image=None, brain_mask=None, tissue_map=None, case_id=None, native=True,
+                stage2=None, no_stage2=False):
     device = resolve_device(device)
     cfg, models, metas, what = _load_models(run_dir, use_folds, device)
+    bundle = None                                         # optional second stage: explicit, else the run's own
+    if not no_stage2 and (stage2 or os.path.exists(os.path.join(run_dir, "stage2", "classifier.pt"))):
+        from .stage2 import load_bundle
+        bundle = load_bundle(stage2 or run_dir)
+        log(f"second stage: {bundle['path']} (accept score >= {bundle['threshold']})")
     T, S = cfg["train"], cfg["selection"]
     log(f"using the {what} of {run_dir} on {device}")
     if threshold is None or min_size is None:
@@ -113,6 +119,8 @@ def predict_run(run_dir, cases_path=None, out="pred", threshold=None, min_size=N
         for col in ("image", "brain_mask", "tissue_map"):
             if c.get(col) and not os.path.exists(c[col]):
                 raise SystemExit(f"{c['id']}: {col} not found: {c[col]}")
+        if not c.get("brain_mask"):
+            raise SystemExit(f"{c['id']}: a brain mask is required (--brain-mask, or the case-list column brain_mask)")
         if csf_rule and not c.get("tissue_map"):
             raise SystemExit(f"{c['id']}: --csf-rule needs a tissue map (column tissue_map / --tissue-map, SynthSeg)")
         for name, col in (cfg["preprocess"].get("extra_channels") or {}).items():
@@ -133,8 +141,23 @@ def predict_run(run_dir, cases_path=None, out="pred", threshold=None, min_size=N
                                 bool(T["amp_bf16"]), bool(cfg["predict"]["tta_flip"]))[0] for m in models]
         p = np.mean(probs, axis=0)
         counter = {}
-        mask = filter_components(p, threshold, min_size, int(S["max_component_voxels"]), counter,
-                                 r.tissue if csf_rule else None, cfg["postprocess"]["csf_labels"])
+        st2_rows = None
+        if bundle is None:
+            mask = filter_components(p, threshold, min_size, int(S["max_component_voxels"]), counter,
+                                     r.tissue if csf_rule else None, cfg["postprocess"]["csf_labels"])
+        else:                                             # second stage: low-threshold candidates, classifier decides
+            from .postprocess import majority_label
+            from .stage2 import apply_stage2
+            frst = r.frst if r.frst is not None else np.ascontiguousarray(np.asarray(nib.load(
+                os.path.join(prepared, c["id"], f"{c['id']}_frst.nii.gz")).dataobj, dtype=np.float32).transpose(2, 1, 0))
+            acc_xyz, st2_rows = apply_stage2(bundle, back(p), back(r.image), back(frst), device)
+            mask = np.ascontiguousarray(acc_xyz.transpose(2, 1, 0))
+            if csf_rule:
+                lab0, n0 = ndimage.label(mask, structure=S26)
+                for k in range(1, n0 + 1):
+                    if majority_label(lab0 == k, r.tissue) in cfg["postprocess"]["csf_labels"]:
+                        mask[lab0 == k] = False
+            counter = dict(stage2_candidates=len(st2_rows), stage2_accepted=int(sum(x["stage2_score"] >= bundle["threshold"] for x in st2_rows)))
         lab, n = ndimage.label(mask, structure=S26)
         lab_x, p_x = back(lab), back(p)
         nib.save(nib.Nifti1Image(np.round(p_x * 255).astype(np.uint8), r.affine), os.path.join(out, "grid", f"{c['id']}_prob.nii.gz"))
@@ -159,7 +182,10 @@ def predict_run(run_dir, cases_path=None, out="pred", threshold=None, min_size=N
                 e.update(centre_mm=[round(float(v), 2) for v in centres[k][0]], centre_voxel=[int(v) for v in centres[k][1]])
             lesions.append(e)
         info = dict(id=c["id"], n_lesions=int(n), total_volume_mm3=round(sum(e["volume_mm3"] for e in lesions), 3),
-                    threshold=threshold, min_size=min_size, model=what, folds=len(models), run=os.path.abspath(run_dir), csf_rule=csf_rule,
+                    threshold=threshold, min_size=min_size, model=what, folds=len(models),
+                    stage2=(dict(classifier=bundle["path"], threshold=bundle["threshold"],
+                                 candidates=[dict(centre_grid_voxel=x["centre_voxel"], score=x["stage2_score"]) for x in st2_rows])
+                            if bundle is not None else None), run=os.path.abspath(run_dir), csf_rule=csf_rule,
                     native_grid=bool(native), **counter, lesions=lesions)
         if native and n_native != n:
             info["warning"] = f"{n} lesions on the model grid but {n_native} on the input grid"
@@ -167,7 +193,9 @@ def predict_run(run_dir, cases_path=None, out="pred", threshold=None, min_size=N
         json.dump(info, open(os.path.join(out, f"{c['id']}.json"), "w"), indent=1)
         rows.append(dict(id=c["id"], n_lesions=int(n), total_volume_mm3=info["total_volume_mm3"],
                          mask=os.path.join(out, f"{c['id']}_mask.nii.gz") if native else os.path.join(out, "grid", f"{c['id']}_mask.nii.gz")))
-        log(f"{c['id']}: {n} microbleeds (threshold {threshold}, min size {min_size}, {what})")
+        log(f"{c['id']}: {n} microbleeds ("
+            + (f"stage 2 on {len(st2_rows)} candidates" if bundle is not None else f"threshold {threshold}, min size {min_size}")
+            + f", {what})")
     with open(os.path.join(out, "predictions.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()

@@ -79,11 +79,14 @@ def test_ids_from_pattern_and_read_ids(tmp_path):
     assert read_ids(str(tmp_path / "a.csv")) == ["x1", "x2"] and read_ids(str(tmp_path / "b.txt")) == ["y1", "y2"]
 
 
-def test_image_only_case_list(tmp_path):
-    """For prediction a case list needs only images (no labels, no masks)."""
+def test_prediction_case_list_and_required_brain_mask(tmp_path):
+    """For prediction a case list needs images and brain masks, no labels; a brain mask is required."""
     root = _layout(tmp_path, 3)
-    rows = build_caselist(_pat(root)["image"], report_dir=str(tmp_path / "o"), log=print)
-    assert len(rows) == 3 and all(r["label"] == "" and r["n_lesions"] == 0 for r in rows)
+    p = _pat(root)
+    rows = build_caselist(p["image"], brain_mask=[p["brain_mask"][0]], report_dir=str(tmp_path / "o"), log=print)
+    assert [r["id"] for r in rows] == ["case00", "case01", "case02"] and all(r["label"] == "" for r in rows)
+    with pytest.raises(SystemExit, match="brain mask is required"):
+        build_caselist(p["image"], report_dir=str(tmp_path / "o2"), log=print)
 
 
 def test_assign_folds_deterministic_stratified():

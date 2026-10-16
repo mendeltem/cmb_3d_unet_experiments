@@ -26,7 +26,7 @@ uniformly, on the data, and every experiment starts from the same corrected inpu
 | input | how it can be made |
 |---|---|
 | bias-corrected T2*/SWI image | e.g. FSL FAST `fast -B --nopve -t 2` on the brain-extracted image (VALDO: `fast -t 2 -n 3 -B -b --nopve` on the skull-stripped T2S) |
-| brain mask, same matrix | a scanner mask or HD-BET; for skull-stripped data such as VALDO leave `brain_mask` empty (`image > 0`, holes filled) |
+| brain mask, same matrix (required) | a scanner mask or HD-BET; for skull-stripped data such as VALDO make it once from the image, e.g. `fslmaths T2S.nii.gz -bin brainmask.nii.gz` |
 | reference CMB mask, same matrix | manual masks (labels are optional for `cmbx predict`) |
 | optional SynthSeg map | `mri_synthseg --robust` on the T2*/SWI image (CSF rule only) |
 
@@ -59,7 +59,36 @@ pytest -q                                    # full test suite, ~2 min on CPU
 CPU-only machine: replace `cu124` by `cpu` in `environment.yml`. Behind a proxy, export `http_proxy`/`https_proxy`
 first. No FSL, HD-BET or FreeSurfer is needed.
 
+### What `install.sh` does
+conda/mamba if available (only Python is solved by conda), otherwise a venv in `.venv` (`uv`, `venv`, or `venv
+--without-pip` + get-pip when `python3-venv` is missing); if `conda create` fails it falls back to the venv by itself.
+PyTorch for the hardware: NVIDIA driver >= 525 -> CUDA 12.4, 450-524 -> CUDA 11.8, AMD -> ROCm, Apple Silicon / ARM ->
+PyPI build, no GPU (e.g. a cluster login node) -> the CUDA build, which also runs on the CPU. `PYTHONNOUSERSITE=1`
+keeps packages in `~/.local` out of the environment (also set by `env.sh`). Then `cmbx` itself, the pretrained VALDO
+model (`models/valdo_t2`, skip with `--no-model`) and `test.py`. Options: `./install.sh --help` (`--torch
+cpu|cu118|cu124|rocm|pypi`, `--name`, `--prefix`, `--venv`, `--recreate`, `--no-test`, `--no-model`, `--dry-run`).
+Behind a proxy export `http_proxy` / `https_proxy` first. On a cluster login node conda can be killed while it reads
+the package index: install on a compute node, in `tmux`, or with `--venv`.
+
+`python test.py` checks the packages (and flags any loaded from `~/.local`), every device present (CPU, CUDA/ROCm,
+MPS), every registered network (forward + backward) and a 5-fold CV + final model on synthetic phantoms. A missing
+GPU is reported, not a failure; real training needs a GPU with >= 2 GB memory (one training ~1.8 GiB) and >= 32 GB
+RAM. Full test suite: `pytest -q`. Every command and option end to end: `python scripts/option_matrix.py`.
+
 ## Your data
+
+### What is needed for training and for inference
+
+| BIDS folder | training (`run-experiment`) | inference (`predict`) |
+|---|---|---|
+| `derivatives/biascorr` (`*_desc-biascorr_T2starw`) | required | required |
+| `derivatives/brainmask` (`*_desc-brain_mask`) | required | required |
+| `derivatives/manual-cmb` (`*_desc-cmb_mask`) | required | not needed |
+| `derivatives/synthseg` (`*_dseg`) | only for the CSF rule | only for `--csf-rule` |
+| `sub-X/anat/*_T2starw` (raw; SWI: `*_acq-swi_T2starw`) | quality checks only | not needed |
+
+Synthetic examples: `examples/bids_train` (training), `examples/bids_new` (inference); `cmbx make-phantoms <dir>
+--bids [--no-labels]` writes more. Leave cases out with `--exclude ids.txt`.
 
 ### Case list from your folder layout (`cmbx make-caselist`)
 For the recommended BIDS layout (README "Data") one option is enough: `cmbx make-caselist --bids <root> --out ...`
@@ -97,14 +126,14 @@ CSV (or JSON list) with the columns
 | `id` | required | unique case id |
 | `image` | required | **bias-corrected** T2*-GRE or SWI magnitude (NIfTI) |
 | `label` | required for CV | reference microbleed mask on the image matrix |
-| `brain_mask` | recommended | on the image matrix; if empty: `image > 0` with holes filled (skull-stripped input) |
+| `brain_mask` | required | brain mask on the image matrix |
 | `tissue_map` | optional | SynthSeg labels (any grid; resampled by world coordinates) for the CSF rule |
 | `inpaint_mask` | optional | mask for the inpainting experiment |
 | `group` | optional | stratification group (scanner, site) |
 | `fold` | optional | fixed fold 0-4; if every row has one, it is the split |
 
 Relative paths are relative to the case list. VALDO (public example): `image` = the FAST-corrected T2S
-(`dev/preproc/<id>/fast_restore.nii.gz` in cmb-valdo-chain), `label` = `*_space-T2S_CMB.nii.gz`, `brain_mask` empty,
+(`dev/preproc/<id>/fast_restore.nii.gz` in cmb-valdo-chain), `label` = `*_space-T2S_CMB.nii.gz`, `brain_mask` = the binarised T2S (skull-stripped),
 `fold` from `dev/split.json`, then `configs/baseline.yaml`. `cmbx make-phantoms data/phantoms` writes ten synthetic
 cases with a case list, to try every command without real data (`configs/smoke_cpu.yaml`).
 
@@ -204,12 +233,79 @@ so the count matches the model grid; on coarse slices two neighbouring microblee
 (volume mm3, max probability, centre in mm and as input voxel) and `predictions.csv`. Checked on 8 cases of an in-house T2* cohort:
 every output on the input matrix/affine, detections on the reference lesions, equal counts on both grids.
 
+## Full example run (synthetic BIDS data, ~20 s on a GPU, 2.5 min on a CPU)
+
+```bash
+cmbx make-caselist --bids examples/bids_train --out ../my_runs/example/cases.csv
+cmbx run-experiment configs/example.yaml --set output_root=../my_runs/example/runs data.cases=../my_runs/example/cases.csv data.prepared_dir=../my_runs/example/prepared data.splits=../my_runs/example/splits.json
+cmbx make-caselist --bids examples/bids_new --no-folds --out ../my_runs/example/new/cases.csv
+cmbx predict --run ../my_runs/example/runs/example --cases ../my_runs/example/new/cases.csv --out ../my_runs/example/pred
+```
+The cross-validation finds the 13 phantom microbleeds; the numbers say nothing about real data.
+
+## Pretrained model and fine-tuning
+
+`models/valdo_t2` (downloaded by `install.sh`, or `cmbx get-model valdo_t2`): this U-Net trained on all 72 public VALDO
+2021 cases (T2*-GRE), the released weights of microbleed_detection_3D_UNET v0.1.0 (SHA-256 checked; outputs identical
+to that package, max difference 0.0), as a run folder with `final/` (seed 42) and `fold0/`, `fold1/` (seeds 42 and 1,
+`--folds` averages them). Licence of the weights: CC BY-NC-SA 4.0, see `models/valdo_t2/MODEL_CARD.md`.
+
+Measured on an unseen in-house T2* cohort (75 cases): pooled lesion F1 0.47 at the released stage-1 cell (threshold
+0.6, 2 mm3); it rises with the threshold up to 0.56 at 0.9 (chosen on those cases, so optimistic); a model trained
+there reaches 0.67. Full-data models give higher probabilities than cross-validation models: on new data calibrate
+`--threshold` on a few labelled cases, or fine-tune. Fine-tuning (`train.init_from=models/valdo_t2 train.lr=0.0001`),
+one fold of that cohort, 6 epochs (7 min on one GPU): F1 0.66, against 0.55 for 6 epochs and 0.63 for 60 epochs from
+scratch (one fold, one seed; seed noise about +-0.03 to 0.08). With the default lr 3e-4 the gain was smaller (0.59).
+Input channels are matched by name: a new channel starts at zero weight (the network first computes exactly the
+pretrained output), a dropped one is removed; `model.base_channels` must stay 32.
+
+## Second stage (optional): a 3D classifier on the candidates
+
+The U-Net misses microbleeds whose probability stays below the threshold; a lower threshold finds them but adds false
+alarms. The second stage (`cmbx/stage2.py`, ported from cmb-valdo-chain `cmb/stage2`) takes every component above 0.15
+(>= 1 mm3, <= 2100 voxels), cuts a 20 x 40 x 40 block of image, FRST and probability around it and lets a small 3D CNN
+(16-32-64 channels, 3 members, 40 epochs) decide microbleed yes / no.
+
+```bash
+cmbx stage2 ../my_runs/runs/my_run                      # train it on the run's out-of-fold maps (nested CV) -> stage2/
+cmbx get-model cmb_classifier                           # the released pooled classifier (research use only, opt-in)
+cmbx stage2 ../my_runs/runs/my_run --init models/cmb_classifier --epochs 10    # fine-tune it on your candidates
+cmbx predict --run ../my_runs/runs/my_run --image scan.nii.gz --out pred        # uses stage2/ when present
+cmbx predict --run models/valdo_t2 --stage2 models/cmb_classifier --image scan.nii.gz --out pred   # any combination
+```
+`--no-stage2` switches it off; `stage2.enabled=true` trains it inside `run-experiment`. `stage2/summary.json` gives the
+nested-CV score next to the first-stage CV score. Earlier measurements in cmb-valdo-chain: on SWI the pooled classifier
+added +0.045 F1 [+0.012; +0.085], on T2* and VALDO it was on par with the CSF rule.
+
+## Configs in the repository
+
+| config | what it tests |
+|---|---|
+| `baseline.yaml` | the winning recipe; use it with `--set` for your data |
+| `example.yaml` | small and fast, for the synthetic BIDS example |
+| `no_frst.yaml` | without the FRST channel (`train.channels: [image]`) |
+| `extra_channel_example.yaml` | an own extra input channel: `preprocess.extra_channels: {name: column}`, then `train.channels: [image, frst, name]` |
+| `csf_rule.yaml` | drop candidates in CSF (needs a SynthSeg map per case) |
+| `inpaint_example.yaml` | paint over a mask before training (hook for own inpainting methods) |
+
+Post-processing variants without retraining: `cmbx evaluate <run> --mode crossfold --csf-rule`. Runs: `summary.json`
+(pooled lesion F1, precision, sensitivity, FP per case, per-case F1), `final/model.pt` (`--no-final` skips it, `cmbx
+train-final <config> [--overwrite]` makes it later). Validated on two in-house cohorts (T2*-GRE 75 cases, SWI 61 cases):
+reference pooled F1 0.665 / 0.630; this package reproduced 0.644 on the T2* cohort (60 epochs: CV ~2.3 h + final model
+~0.5 h on one GPU).
+
+## SLURM
+`scripts/slurm_quick_test.sbatch` runs `test.py` on a GPU share (`--gres=shard:1`, ~1 min);
+`scripts/slurm_run_experiment.sbatch <config> [key=value ...]` runs one experiment (resubmitting continues where it
+stopped). Use the partition / GRES names of your cluster (`sinfo -o "%P %G"`); without shards `--gres=gpu:1`.
+
 ## Options (config keys, `--set key=value`)
 
 | key | values |
 |---|---|
 | `train.loss` | `bce_dice` (default, 0.5 BCE + 0.5 soft Dice), `bce`, `dice`, `focal_dice` (focal BCE gamma 2 + Dice) |
 | `train.channels` | `[image, frst]` (default), `[image]`, plus own channels from `preprocess.extra_channels` |
+| `stage2.enabled`, `stage2.init_from`, `stage2.epochs`, `stage2.members`, `stage2.lr` | optional second stage (see above) |
 | `train.init_from`, `train.init_channels` | fine-tuning: start from a run folder (e.g. `models/valdo_t2`) or a model.pt; input channels matched by name (new = zero weight, so training starts from exactly the pretrained output; dropped ones removed); same `model.base_channels` needed |
 | `train.use_last_epoch` | `false` (inner-fold best state) / `true` (last state) |
 | `train.amp_bf16`, `train.device` | bfloat16 autocast on CUDA; `auto` / `cuda` / `cuda:N` / `cpu` / `mps` |

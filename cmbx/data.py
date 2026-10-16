@@ -4,7 +4,7 @@ Case list: CSV (header row) or JSON (list of objects). Columns:
     id           unique case id (used in file names)                                   required
     image        T2*-weighted GRE or SWI magnitude, NIfTI                               required
     label        reference microbleed mask, same grid as the image (non-zero = CMB)     required for CV
-    brain_mask   brain mask, same grid (recommended; else image > 0 with holes filled)  optional
+    brain_mask   brain mask, same grid                                                   required
     tissue_map   SynthSeg label map (any grid, resampled by world coordinates)          optional (CSF rule)
     inpaint_mask mask for the inpainting experiment, same grid as the image             optional
     group        stratification group, e.g. scanner or cohort                           optional
