@@ -5,11 +5,11 @@
 #   cmbx make-caselist --source <...>/DATA/CHARITE/BIDS_SWI --modality swi \
 #        --out ../cmb_3d_unet_experiments_runs/catalina-swi/cases.csv
 # On this machine (source mirror + local derivatives):
-#   cmbx make-caselist --source /home/uchralt/data/sourcedata/catalina/BIDS_SWI --modality swi \
-#        --biascorr-dir /home/uchralt/data/bids/catalina-swi/derivatives/biascorr \
-#        --brainmask-dir /home/uchralt/data/bids/catalina-swi/derivatives/brainmask \
-#        --exclude-tsv /home/uchralt/data/bids/catalina-swi/ausgeschlossen.tsv \
-#        --tissue-pattern "/home/uchralt/data/work/mb-arena/synthseg-swi/robust/{id}_synthseg.nii.gz" \
+#   cmbx make-caselist --source /path/to/DATA/CHARITE/BIDS_SWI --modality swi \
+#        --biascorr-dir /path/to/bids/catalina-swi/derivatives/biascorr \
+#        --brainmask-dir /path/to/bids/catalina-swi/derivatives/brainmask \
+#        --exclude-tsv /path/to/bids/catalina-swi/ausgeschlossen.tsv \
+#        --tissue-pattern "/path/to/synthseg-swi/robust/{id}_synthseg.nii.gz" \
 #        --out ../cmb_3d_unet_experiments_runs/catalina-swi/cases.csv
 #   cmbx run-experiment configs/catalina_swi.yaml
 # Inputs are already bias-corrected (FSL FAST -B on the brain-extracted image, done once on the data, not here).
