@@ -1,13 +1,14 @@
 # cmb_3d_unet_experiments
-> Find cerebral microbleeds on T2* and SWI MRI with a 3D U-Net.
-
-Predict with a pretrained model, fine-tune it, or train on your own data. Python package `cmbx`.
+> Find cerebral microbleeds on T2* and SWI MRI with a 3D U-Net. Same commands and folders as MicrobleedNet.
 
 ![How it works](docs/architecture.svg)
 
-![3D U-Net](docs/unet.svg)
+- Step 1: a 3D U-Net marks microbleed candidates (input: image + FRST).
+- Step 2 (optional): a classifier re-checks every candidate; the teacher–student network of MicrobleedNet or a small CNN.
+- Scripts written for [MicrobleedNet](https://github.com/v-sundaresan/microbleed-detection) run with `cmbx` in place of
+  `microbleednet`. Differences: [below](#differences-to-microbleednet).
 
-## Installing / Getting started
+## Install
 
 ```bash
 git clone https://github.com/mendeltem/cmb_3d_unet_experiments.git
@@ -21,126 +22,122 @@ cd cmb_3d_unet_experiments
 ./install.sh
 ```
 
-- Installs Python, PyTorch for your GPU, `cmbx` and the pretrained model `models/valdo_t2`.
-- Ends with `ALL REQUIRED CHECKS PASSED`.
-
 ```bash
 source env.sh
 ```
 
-- Activates the environment. Run it again in every new shell.
+- Installs Python, PyTorch for your GPU, `cmbx` and the pretrained model. Ends with `ALL REQUIRED CHECKS PASSED`.
+- `source env.sh` in every new shell.
 
-## Predict with the pretrained model
+## Data: one folder per case
+
+```
+my_cohort/
+├── files.xlsx                          list of all files
+└── derivatives/preprocessed/
+    └── sub-001/
+        ├── sub-001_t2star.nii.gz       bias-corrected T2* (SWI: sub-001_swi.nii.gz)
+        ├── sub-001_brainmask.nii.gz    brain mask
+        ├── sub-001_cmb.nii.gz          microbleed mask (training only)
+        ├── sub-001_synthseg.nii.gz     optional: SynthSeg, for --csf_rule True
+        └── sub-001_flair.nii.gz        optional: FLAIR registered to the T2*, for --flair True
+```
+
+- Examples: `examples/train` (10 synthetic cases), `examples/new` (2, no labels), `examples/raw` (scans before preprocessing).
+- `-i` takes the cohort folder or its `derivatives/preprocessed`. A folder written by `microbleednet preprocess` works too.
+
+## Preprocess
 
 ```bash
-cmbx predict --run models/valdo_t2 --image examples/bids_new/derivatives/biascorr/sub-001/anat/sub-001_T2starw_desc-biascorr_T2starw.nii.gz --brain-mask examples/bids_new/derivatives/brainmask/sub-001/anat/sub-001_T2starw_desc-brain_mask.nii.gz --out ../my_runs/pred
+cmbx preprocess -i examples/raw -ir _T2starw -f True -b examples/raw -br _brainmask.nii.gz -l examples/raw -lr _cmb.nii.gz -flr _FLAIR -o ../my_runs/cohort/derivatives/preprocessed
 ```
 
-- Writes the microbleed mask, a labelled lesion map, `sub-001_T2starw_desc-biascorr_T2starw.json` (one entry per
-  microbleed) and `predictions.csv` to `../my_runs/pred`.
-- Your scan: replace `--image` (bias-corrected T2*) and `--brain-mask`.
+- Writes one folder per case and `../my_runs/cohort/files.xlsx`.
+- Without `-f True`: skull stripping and bias correction with FSL (BET + FAST), as MicrobleedNet.
+- FLAIR (`-flr`): BET, FAST and a rigid FLIRT registration onto the T2* (`--flair_registered True` if it is already).
+- `--synthseg True` adds the tissue map (FreeSurfer; from the FLAIR when there is one), `--inpaint True` the
+  vessel-inpainted scan. `-mod swi` names the scan `_swi`.
 
-## Train on your data
-
-Data layout (as in `examples/bids_train`):
-
-```
-my_dataset/
-├── participants.tsv
-└── derivatives/
-    ├── biascorr/sub-001/anat/sub-001_T2starw_desc-biascorr_T2starw.nii.gz
-    ├── brainmask/sub-001/anat/sub-001_T2starw_desc-brain_mask.nii.gz
-    └── manual-cmb/sub-001/anat/sub-001_T2starw_desc-cmb_mask.nii.gz
-```
+## Train
 
 ```bash
-DATA=/path/to/my_dataset
+cmbx train -i examples/train -l examples/train -m ../my_runs/my_model
 ```
+
+- One model -> `../my_runs/my_model/final/model.pt`; 20 % of the cases choose the threshold (`-tr_prop 0.8`).
+- About 25 min on one GPU for 60 cases.
+
+Switch steps on or off, e.g. without FRST:
 
 ```bash
-RUNS=../my_runs
+cmbx train -i examples/train -l examples/train -m ../my_runs/no_frst --frst False
 ```
 
-```bash
-cmbx make-caselist --bids $DATA --out $RUNS/cases.csv
-```
-
-- Writes the case list with 5 folds and reports missing files or suspicious masks.
-
-```bash
-cmbx run-experiment configs/baseline.yaml --set name=my_run output_root=$RUNS/runs data.cases=$RUNS/cases.csv data.prepared_dir=$RUNS/prepared data.splits=$RUNS/splits.json
-```
-
-- Trains and tests 5 models (cross-validation), then one final model on all cases (about 3 h on one GPU).
-- Score: `$RUNS/runs/my_run/summary.json`. Model: `$RUNS/runs/my_run/final/model.pt`.
-
-Fine-tune the pretrained model instead (minutes, usually better):
-
-```bash
-cmbx run-experiment configs/baseline.yaml --set name=my_finetune output_root=$RUNS/runs data.cases=$RUNS/cases.csv data.prepared_dir=$RUNS/prepared data.splits=$RUNS/splits.json train.init_from=models/valdo_t2 train.lr=0.0001
-```
-
-Optional second stage, a 3D classifier that re-checks every candidate:
-
-```bash
-cmbx stage2 $RUNS/runs/my_run
-```
-
-- Trained on the run's cross-validation output; `predict` uses it automatically from then on.
-
-## Predict with your model
-
-```bash
-cmbx predict --run $RUNS/runs/my_run --image /path/to/scan.nii.gz --brain-mask /path/to/brainmask.nii.gz --out $RUNS/pred
-```
-
-## SLURM
-
-```bash
-mkdir -p logs
-```
-
-```bash
-sbatch scripts/slurm_run_experiment.sbatch configs/baseline.yaml name=my_run output_root=$RUNS/runs data.cases=$RUNS/cases.csv data.prepared_dir=$RUNS/prepared data.splits=$RUNS/splits.json
-```
-
-- Same as `run-experiment` above, as a job on a GPU share; output in `logs/`.
-
-## Features
-
-- 5-fold cross-validation with honest scores and a final model.
-- Pretrained VALDO model for direct use or fine-tuning.
-- Optional second-stage 3D classifier.
-- Masks and lesion lists on the grid of the input scan.
-- Experiments by config: input channels, losses, inpainting, CSF rule.
-
-## Configuration
-
-Add any of these to `--set` (all options: [docs/DETAILS.md](docs/DETAILS.md)):
-
-| key | default | |
+| option | default | |
 |---|---|---|
-| `train.epochs` | `60` | training length |
-| `train.init_from` | none | start from a trained model, e.g. `models/valdo_t2` |
-| `train.lr` | `0.0003` | learning rate; `0.0001` for fine-tuning |
-| `stage2.enabled` | `false` | train the second stage inside `run-experiment` |
-| `train.device` | `auto` | `cuda`, `cpu` |
+| `--frst` | `True` | FRST as second input channel |
+| `--inpaint` | `False` | train on vessel-inpainted scans (MicrobleedNet preprocessing) |
+| `--csf_rule` | `False` | drop detections in CSF (needs `_synthseg`) |
+| `--flair` | `False` | FLAIR as extra input channel (needs `_flair`) |
+| `-cand_disc` | `False` | train step 2, MicrobleedNet's teacher–student (`--disc_model cnn`: small CNN) |
+| `-ep`, `-ilr`, `-bs` | `60`, `0.0003`, `4` | epochs, learning rate, batch size |
+
+Every MicrobleedNet option works (`-tr_prop`, `-es`, `-cp_type`, `-lrm`, `-opt`, ...): `cmbx train --help`,
+[docs/DETAILS.md](docs/DETAILS.md#microbleednet-options).
+
+## Fine-tune the pretrained model
+
+```bash
+cmbx fine_tune -i examples/train -l examples/train -m pre -o ../my_runs/my_finetuned
+```
+
+- `-m pre`: the pretrained VALDO model; or any model folder. Learning rate 0.0001.
+
+## Predict
+
+```bash
+cmbx evaluate -i examples/new -m ../my_runs/my_model -o ../my_runs/pred
+```
+
+- Masks on the input grid: `../my_runs/pred/final_predictions/predicted_final_cmbx_<case>.nii.gz`.
+- One entry per microbleed: `../my_runs/pred/details/<case>.json`. `-int True` adds the step-1 maps.
+
+## Cross-validation
+
+```bash
+cmbx cross_validate -i examples/train -l examples/train -o ../my_runs/cv -fold 5
+```
+
+- Lesion-level F1 out of fold: `../my_runs/cv/summary.json`. Same folds for every setting you compare.
+
+## Differences to MicrobleedNet
+
+| | MicrobleedNet (Sundaresan 2023) | cmbx | effect on VALDO (lesion F1) |
+|---|---|---|---|
+| vessel inpainting | always | off; `--inpaint True` | without: +0.136 |
+| FRST channel | yes | yes; `--frst False` | without: −0.053 |
+| step 1 | 3D U-Net on 48³ patches, native grid | anisotropic 3D U-Net, 38 × 62 × 94 patches, 0.5 × 0.5 × 1 mm grid | 24 mm patches: −0.216 |
+| step 2 | teacher–student; the teacher is loaded from pretrained files, never trained | optional; teacher trained, then student distilled | |
+| CSF rule | no | optional; `--csf_rule True` | +0.06 |
+| threshold | fixed | chosen on held-out cases | |
+
+Details and sources: [docs/DETAILS.md](docs/DETAILS.md#differences-to-microbleednet).
 
 ## Links
 
-- Details, results, validation: [docs/DETAILS.md](docs/DETAILS.md)
+- Details, all options, validation: [docs/DETAILS.md](docs/DETAILS.md)
+- MicrobleedNet: https://github.com/v-sundaresan/microbleed-detection
 - Issues: https://github.com/mendeltem/cmb_3d_unet_experiments/issues
-- Pretrained weights: https://github.com/mendeltem/microbleed_detection_3D_UNET/releases/tag/v0.1.0
 
 ## Licensing
 
 - Code: MIT. Pretrained VALDO weights: CC BY-NC-SA 4.0 (non-commercial).
+- Cite MicrobleedNet: Sundaresan et al., Front Neuroinform 2023, doi:10.3389/fninf.2023.1204186.
 - Cite VALDO: Sudre et al., Med Image Anal 2024, doi:10.1016/j.media.2023.103029.
-- Patient data never go into this repository; keep data and outputs outside it.
+- Patient data never go into this repository.
 
-## Hardware
+---
 
-- GPU: NVIDIA or AMD with 2 GB memory or more; a CPU works, but training is slow.
-- RAM: 32 GB for training.
-- Only the GPU driver is needed, no CUDA toolkit.
-- Time on one GPU: training about 3 h, fine-tuning minutes, prediction seconds per scan.
+<sub>**Hardware:** NVIDIA or AMD GPU with 2 GB or more (CPU works, slowly); 32 GB RAM for training; only the GPU driver,
+no CUDA toolkit. **Software:** Linux or macOS; conda or Python 3.10+ (set up by `install.sh`); FSL for
+`cmbx preprocess` without `-f True`; FreeSurfer 7.3+ for `--synthseg True`.</sub>

@@ -68,12 +68,17 @@ def to_native(labels_xyz: np.ndarray, prob_xyz: np.ndarray, grid_affine: np.ndar
     return lab, prob, centres
 
 
-def _load_models(run_dir, use_folds, device):
+def _load_models(run_dir, use_folds, device, checkpoint=None):
     cfg_path = os.path.join(run_dir, "config.yaml")
     if not os.path.exists(cfg_path):
         raise SystemExit(f"{run_dir} is not a finished run (no config.yaml); give the folder that holds final/ and fold0/")
     cfg = yaml.safe_load(open(cfg_path))
     final = os.path.join(run_dir, "final", "model.pt")
+    if checkpoint and not use_folds:                   # MicrobleedNet -cp_type: model_best.pt / model_epoch<N>.pt
+        final = os.path.join(run_dir, "final", checkpoint)
+        if not os.path.exists(final):
+            have = sorted(os.path.basename(f) for f in glob.glob(os.path.join(run_dir, "final", "model*.pt")))
+            raise SystemExit(f"no checkpoint {checkpoint} in {run_dir}/final (there: {have})")
     if os.path.exists(final) and not use_folds:        # default: the one model trained on all cases (cmbx/final.py)
         paths = [final]
     else:
@@ -88,14 +93,17 @@ def _load_models(run_dir, use_folds, device):
         mdl = build_model(cfg["model"]["name"], len(T["channels"]), int(cfg["model"]["base_channels"]))
         models.append(load_state(mdl, f).to(device).eval())
     metas = [json.load(open(os.path.join(os.path.dirname(f), "meta.json"))) for f in paths]
+    if checkpoint and paths == [final]:                # a checkpoint carries its own operating cell
+        ck = torch.load(final, map_location="cpu", weights_only=False).get("meta") or {}
+        metas = [dict(metas[0], **{k: ck[k] for k in ("threshold", "min_size", "epoch") if k in ck})]
     return cfg, models, metas, ("final model" if paths == [final] else f"{len(paths)} fold models")
 
 
 def predict_run(run_dir, cases_path=None, out="pred", threshold=None, min_size=None, device="auto", csf_rule=False,
                 log=print, use_folds=False, image=None, brain_mask=None, tissue_map=None, case_id=None, native=True,
-                stage2=None, no_stage2=False):
+                stage2=None, no_stage2=False, checkpoint=None):
     device = resolve_device(device)
-    cfg, models, metas, what = _load_models(run_dir, use_folds, device)
+    cfg, models, metas, what = _load_models(run_dir, use_folds, device, checkpoint)
     bundle = None                                         # optional second stage: explicit, else the run's own
     if not no_stage2 and (stage2 or os.path.exists(os.path.join(run_dir, "stage2", "classifier.pt"))):
         from .stage2 import load_bundle

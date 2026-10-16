@@ -100,7 +100,7 @@ def run_experiment(cfg: Dict, folds=None, workers: Optional[int] = None, log=pri
     cfg_path = os.path.join(run_dir, "config.yaml")
     if os.path.exists(cfg_path):
         import yaml
-        old = yaml.safe_load(open(cfg_path))
+        old = C._fill_defaults(C.DEFAULTS, yaml.safe_load(open(cfg_path)))   # keys added in later versions = defaults
         new = {k: v for k, v in cfg.items() if not k.startswith("_")}
         if json.dumps(old, sort_keys=True, default=str) != json.dumps(new, sort_keys=True, default=str):
             raise SystemExit(f"{run_dir} exists with a different config; choose another `name` or delete the folder")

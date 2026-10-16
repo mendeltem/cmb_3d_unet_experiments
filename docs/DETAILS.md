@@ -79,19 +79,34 @@ RAM. Full test suite: `pytest -q`. Every command and option end to end: `python 
 
 ### What is needed for training and for inference
 
-| BIDS folder | training (`run-experiment`) | inference (`predict`) |
-|---|---|---|
-| `derivatives/biascorr` (`*_desc-biascorr_T2starw`) | required | required |
-| `derivatives/brainmask` (`*_desc-brain_mask`) | required | required |
-| `derivatives/manual-cmb` (`*_desc-cmb_mask`) | required | not needed |
-| `derivatives/synthseg` (`*_dseg`) | only for the CSF rule | only for `--csf-rule` |
-| `sub-X/anat/*_T2starw` (raw; SWI: `*_acq-swi_T2starw`) | quality checks only | not needed |
+One folder per case under `<cohort>/derivatives/preprocessed/` (README "Data"); `-i` takes the cohort or that folder.
 
-Synthetic examples: `examples/bids_train` (training), `examples/bids_new` (inference); `cmbx make-phantoms <dir>
---bids [--no-labels]` writes more. Leave cases out with `--exclude ids.txt`.
+| file in `<case>/` | training (`cmbx train`, `cross_validate`) | inference (`cmbx evaluate`) |
+|---|---|---|
+| `<case>_t2star.nii.gz` or `_swi` (bias-corrected scan; `_image` also works) | required | required |
+| `<case>_brainmask.nii.gz` | required | required |
+| `<case>_cmb.nii.gz` (reference microbleeds; `_label` also works) | required | not needed |
+| `<case>_synthseg.nii.gz` (SynthSeg labels, any grid) | only with `--csf_rule True` | only with `--csf_rule True` |
+| `<case>_flair.nii.gz` (FLAIR registered to the scan; another grid of the same session also works) | only with `--flair True` | if the model uses FLAIR |
+| `<case>_inpainted.nii.gz` (vessel-inpainted scan) | only with `--inpaint True` | if the model was trained so |
+
+`cmbx preprocess -flr <ending>` registers the FLAIR to the scan (fslreorient2std, BET -R -f 0.4, FAST -B --nopve -t 2,
+FLIRT 6 dof with normalised mutual information, trilinear, brain mask) and, with `--synthseg True`, runs SynthSeg
+--robust on the FLAIR (better tissue contrast and thinner slices than T2* / SWI) and carries it over with the same
+matrix (nearest neighbour); without FLAIR SynthSeg runs on the scan. FLAIR and SynthSeg on another grid are brought
+onto the scan in world coordinates (linear / nearest neighbour). `cmbx preprocess` writes this layout and
+`files.xlsx` (one row per case, one column per file). The output folder of `microbleednet preprocess` is read too:
+`fsl_preprocessed/images/<name>_preproc` is the scan, `images/<name>_preproc` (vessels inpainted, intensity inverted)
+is inverted back for `--inpaint True`, `labels/<name>_mask` are the labels, the brain mask is the scan > 0 with holes
+filled (MicrobleedNet's own rule). Grid volumes and derived files go to `<cohort>/derivatives/cmbx/` (`--work_dir`).
+
+Synthetic examples: `examples/train`, `examples/new` (no labels), `examples/raw` (input of `cmbx preprocess`);
+`cmbx make-phantoms <dir> --preprocessed [--no-labels]` writes more.
 
 ### Case list from your folder layout (`cmbx make-caselist`)
-For the recommended BIDS layout (README "Data") one option is enough: `cmbx make-caselist --bids <root> --out ...`
+The configuration-file commands (`run-experiment`, `train-final`, `predict --cases`) read a case list. For a BIDS layout
+with `derivatives/{biascorr,brainmask,manual-cmb,synthseg}` (`cmbx make-phantoms <dir> --bids` writes one) one option is
+enough: `cmbx make-caselist --bids <root> --out ...`
 (patterns of `cmbx.caselist.BIDS`; derivative folders that do not exist, e.g. `manual-cmb` for new scans, are
 skipped). Any other layout:
 Nothing about a dataset is built in: the layout is given as path patterns with `{id}` (glob `*` allowed; the first
@@ -187,8 +202,8 @@ how many reference voxels lay under the inpaint mask.
 **Post-processing without retraining.** The CV stores every test-fold probability map (`<id>_pred_proba.nii.gz`,
 uint8 = round(p x 255)). Re-score them:
 ```bash
-cmbx evaluate <run> --mode crossfold --csf-rule   # cell chosen on the other 4 folds, CSF rule on (how the +0.06 on VALDO was measured)
-cmbx evaluate <run> --mode inner --csf-rule       # each fold's inner-fold cell, CSF rule on
+cmbx rescore <run> --mode crossfold --csf-rule   # cell chosen on the other 4 folds, CSF rule on (how the +0.06 on VALDO was measured)
+cmbx rescore <run> --mode inner --csf-rule       # each fold's inner-fold cell, CSF rule on
 cmbx compare <output_root>                        # one table of all runs and re-scorings -> <output_root>/summary.csv
 ```
 (Re-binarising the uint8 maps can differ from the CV masks for voxels within 1/255 of the threshold.)
@@ -233,15 +248,20 @@ so the count matches the model grid; on coarse slices two neighbouring microblee
 (volume mm3, max probability, centre in mm and as input voxel) and `predictions.csv`. Checked on 8 cases of an in-house T2* cohort:
 every output on the input matrix/affine, detections on the reference lesions, equal counts on both grids.
 
-## Full example run (synthetic BIDS data, ~20 s on a GPU, 2.5 min on a CPU)
+## Full example run (synthetic data, about 1 min on a GPU, 3 min on a CPU)
 
 ```bash
-cmbx make-caselist --bids examples/bids_train --out ../my_runs/example/cases.csv
-cmbx run-experiment configs/example.yaml --set output_root=../my_runs/example/runs data.cases=../my_runs/example/cases.csv data.prepared_dir=../my_runs/example/prepared data.splits=../my_runs/example/splits.json
-cmbx make-caselist --bids examples/bids_new --no-folds --out ../my_runs/example/new/cases.csv
-cmbx predict --run ../my_runs/example/runs/example --cases ../my_runs/example/new/cases.csv --out ../my_runs/example/pred
+cmbx cross_validate -i examples/train -l examples/train -o ../my_runs/example_cv -fold 5 --config configs/example.yaml
+cmbx train -i examples/train -l examples/train -m ../my_runs/example_model --config configs/example.yaml
+cmbx evaluate -i examples/new -m ../my_runs/example_model -o ../my_runs/example_pred
 ```
-The cross-validation finds the 13 phantom microbleeds; the numbers say nothing about real data.
+The same with a case list and a config file (all settings in one YAML):
+```bash
+cmbx make-phantoms ../my_runs/bids --bids
+cmbx make-caselist --bids ../my_runs/bids --out ../my_runs/example/cases.csv
+cmbx run-experiment configs/example.yaml --set output_root=../my_runs/example/runs data.cases=../my_runs/example/cases.csv data.prepared_dir=../my_runs/example/prepared data.splits=../my_runs/example/splits.json
+```
+The numbers on phantoms say nothing about real data.
 
 ## Pretrained model and fine-tuning
 
@@ -273,9 +293,78 @@ cmbx stage2 ../my_runs/runs/my_run --init models/cmb_classifier --epochs 10    #
 cmbx predict --run ../my_runs/runs/my_run --image scan.nii.gz --out pred        # uses stage2/ when present
 cmbx predict --run models/valdo_t2 --stage2 models/cmb_classifier --image scan.nii.gz --out pred   # any combination
 ```
-`--no-stage2` switches it off; `stage2.enabled=true` trains it inside `run-experiment`. `stage2/summary.json` gives the
+`--no-stage2` switches it off; `stage2.enabled=true` trains it inside `run-experiment`.
+
+**Teacher–student (MicrobleedNet's step 2).** `stage2.method: teacher_student` (`cmbx stage2 <run> --method
+teacher_student`, `cmbx train -cand_disc True --disc_model teacher_student`) follows Sundaresan et al. 2023, Fig. 2:
+input image + FRST of a 16 x 32 x 32 crop; a TEACHER with feature extractor Tf (1x1x1 conv to 3 channels, then
+conv + batch norm + ReLU blocks down to 8^3 x 128), voxel-wise segmentor Ts (two upsamplings with skip connections back
+to the crop) and patch classifier Tc (1x1x1 conv, two pool + conv steps to 2^3 x 128, fully connected 1024-128-32-2 with
+20 % dropout) is trained on the candidates (cross-entropy on the class + BCE / soft Dice on the reference voxels of the
+crop); then a STUDENT (Tf + Tc) learns from it offline with MicrobleedNet's loss CE + alpha T^2 KL(teacher_T ||
+student_T) + (1 - alpha) CE, T = 4, alpha = 0.4 (`stage2.kd_temperature`, `stage2.kd_alpha`). The student is what is
+applied. Difference to MicrobleedNet's code (commit 958f1cb): there `train`, `fine_tune` and `cross_validate` load the
+teacher from pretrained files and never train it; when the files are missing the error is created but not raised
+(`ValueError(...)` without `raise` in `cdisc_train_function.py`), and the student learns from a randomly initialised
+teacher. `stage2/summary.json` gives the
 nested-CV score next to the first-stage CV score. Earlier measurements in cmb-valdo-chain: on SWI the pooled classifier
 added +0.045 F1 [+0.012; +0.085], on T2* and VALDO it was on par with the CSF rule.
+
+## MicrobleedNet options
+
+`cmbx train`, `fine_tune`, `evaluate`, `cross_validate` and `preprocess` take the options of `microbleednet` (commit
+958f1cb) under the same names; switches accept True/False (MicrobleedNet declares them `type=bool`, which reads any text,
+even "False", as true).
+
+| option | in cmbx | default |
+|---|---|---|
+| `-i`, `-l`, `-m`, `-o` | as MicrobleedNet; `-l` may be the same folder as `-i` | |
+| `-tr_prop` | share of cases trained on; the rest choose threshold, minimum size, best epoch and early stop | train: 0.8 |
+| `-es` | stop after N epochs without gain on the held-out cases (cross_validate: on the inner fold) | off |
+| `-cp_type`, `-cp_n` | `last`, `best` (on held-out cases) or `everyN` (also `final/model_epoch<N>.pt`); evaluate loads the same | last |
+| `-sv_resume` | save `final/resume.pt` every epoch and continue from it | False |
+| `-sv_mod` | also `final/model_full.pt` (the whole module) | False |
+| `-ilr`, `-opt`, `-eps`, `-mom` | learning rate; optimizer `adamw`, `adam` (no weight decay, as MicrobleedNet) or `sgd` | 0.0003 (fine_tune 0.0001), adamw |
+| `-lrm`, `-gamma` | step schedule: lr x gamma at each milestone epoch (otherwise cosine annealing) | cosine |
+| `-ep`, `-bs` | epochs, batch size | 60, 4 |
+| `-bfactor` | draw each epoch's patches from N random cases | all |
+| `-psize` | cubic patches of N voxels | 38 x 62 x 94 |
+| `-da`, `-af` | random flips on/off; patches per epoch x N | True, 1 |
+| `-cand_det`, `-cand_disc` | step 1 is always trained; `-cand_disc True` also trains step 2 | True, False |
+| `-ftlayers` | fine_tune: train only these levels, 1 = output ... 5 = bottleneck ... 9 = input | all |
+| `-mgpu` | DataParallel over all visible GPUs | False |
+| `-fold`, `-resume_fold` | cross_validate: number of folds, start at fold N | 5 |
+| `-p`, `-m pre` | the pretrained VALDO model (`models/valdo_t2`, or `$CMBX_PRETRAINED_MODEL_PATH`) | |
+| `-int` | evaluate: also `cdet_predictions/` (step-1 probability) and `input_images/` | False |
+| `-f`, `-ir`, `-lr` | preprocess: scans already skull-stripped and bias-corrected; name endings, as MicrobleedNet | False |
+| `-v`, `-pbar`, `-nclass`, `-cpld_type`, `-cpld_n`, `-sv` | accepted, no effect (a note says so) | |
+
+cmbx adds `--inpaint`, `--frst`, `--csf_rule`, `--flair`, `--disc_model`, `--kd_temperature`, `--kd_alpha`, `--loss`,
+`--patches`, `--seed`, `--device`, `--work_dir`, `--overwrite`, and `--config <yaml>` / `--set key=value` for every
+setting of the configuration (below). Case names follow MicrobleedNet: the file name before `-ir`; without `-f True`
+prefixed by the parent folder (`<folder>-<name>`).
+
+## Differences to MicrobleedNet
+
+MicrobleedNet: Sundaresan et al., Front Neuroinform 17 (2023), doi:10.3389/fninf.2023.1204186; code
+https://github.com/v-sundaresan/microbleed-detection, commit 958f1cb (= main, checked 16 Oct 2026). Effects measured on
+VALDO 2021 task 2 (57 cases, 5-fold CV, pooled lesion F1, paired over folds), with this U-Net unless stated:
+
+| step | MicrobleedNet | cmbx | measured |
+|---|---|---|---|
+| skull stripping, bias field | BET + FAST -B (script) | the same in `cmbx preprocess`; or your own (`-f True`) | without bias correction: -0.022 (n.s.) |
+| vessel inpainting | Frangi + KMeans per slice, always | off; `--inpaint True` uses MicrobleedNet's own function | the original inpainting covers 109 of 236 VALDO microbleeds; training without it +0.136 [+0.065; +0.226] |
+| intensity | 1 - I / max in the brain | the same | z-score: -0.005 (n.s.) |
+| grid | native | 0.5 x 0.5 x 1 mm, cropped to the brain | |
+| FRST | 2 channels (image + FRST) | the same; radii 2, 3, 4, 6 voxels; `--frst False` | without FRST: -0.053 [-0.116; +0.004] |
+| step 1 network | 3D U-Net, 48^3 patches, 1:1 patches with / without CMB | anisotropic 3D U-Net (22.5 M parameters), 38 x 62 x 94 patches, 60 % with a microbleed at a random position | 24 mm cubes: -0.216; 48 mm cubes: -0.016 (n.s.) |
+| loss | weighted cross-entropy + Dice | 0.5 BCE + 0.5 soft Dice (`--loss`) | lesion-wise loss: -0.044 (n.s.) |
+| training | Adam, step schedule, early stopping on 20 % validation cases | AdamW, cosine, 60 epochs; MicrobleedNet options available | 40 epochs with early stopping -> 60 fixed: +0.066 |
+| step 2 | teacher-student, teacher loaded from pretrained files | optional; teacher trained here (`--disc_model teacher_student`) or small CNN (`cnn`) | CNN on SWI candidates of an in-house cohort: +0.044 [+0.012; +0.085] |
+| post-processing | >= 8 voxels from the brain edge; eccentricity / solidity filter; < 2 voxels removed | threshold + minimum size chosen on held-out cases; components > 2100 voxels removed; optional CSF rule | CSF rule +0.06; distance to the brain edge: +-0.00 |
+
+Fine-tuning MicrobleedNet's pretrained weights on our folds (its own code with the repairs needed to run it) reached
+lesion F1 0.07 on VALDO; its step 2 stayed at chance accuracy (0.5). MicrobleedNet trained from scratch was not measured.
 
 ## Configs in the repository
 
@@ -288,7 +377,7 @@ added +0.045 F1 [+0.012; +0.085], on T2* and VALDO it was on par with the CSF ru
 | `csf_rule.yaml` | drop candidates in CSF (needs a SynthSeg map per case) |
 | `inpaint_example.yaml` | paint over a mask before training (hook for own inpainting methods) |
 
-Post-processing variants without retraining: `cmbx evaluate <run> --mode crossfold --csf-rule`. Runs: `summary.json`
+Post-processing variants without retraining: `cmbx rescore <run> --mode crossfold --csf-rule`. Runs: `summary.json`
 (pooled lesion F1, precision, sensitivity, FP per case, per-case F1), `final/model.pt` (`--no-final` skips it, `cmbx
 train-final <config> [--overwrite]` makes it later). Validated on two in-house cohorts (T2*-GRE 75 cases, SWI 61 cases):
 reference pooled F1 0.665 / 0.630; this package reproduced 0.644 on the T2* cohort (60 epochs: CV ~2.3 h + final model
@@ -381,7 +470,7 @@ The VALDO numbers come from a different dataset (public, 3 sites) and are not a 
   exclusions are passed as files (`--exclude`). `cmbx prepare` takes the reference mask array on the image matrix,
   which is what the header rewrite achieved.
 * The CSF rule in the CV (`csf_rule: true`) acts on the inner selection and the test fold; in cmb-valdo-chain it was
-  applied afterwards to the stored maps with a cross-fold cell choice -- that variant is `cmbx evaluate --mode
+  applied afterwards to the stored maps with a cross-fold cell choice -- that variant is `cmbx rescore --mode
   crossfold --csf-rule`.
 * Threshold choice when the inner fold holds no reference lesion at all (possible only with tiny or unbalanced
   data): F1 is 0 for every cell, so the cell with the fewest false positives is taken instead of the fallback

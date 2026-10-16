@@ -67,6 +67,25 @@ DEFAULTS: Dict[str, Any] = {
         "use_last_epoch": False,                 # True: test with the last state instead of the inner-fold best
         "init_from": None,                       # fine-tuning: start from a pretrained run folder / model.pt
         "init_channels": None,                   # channels of init_from if it is a bare file without config.yaml
+        # ---- MicrobleedNet options (cmbx train / fine_tune / cross_validate); the defaults keep the recipe above
+        "optimizer": "adamw",                    # adamw | adam | sgd                       (MicrobleedNet -opt)
+        "epsilon": 1.0e-8,                       # Adam/AdamW epsilon                       (-eps)
+        "momentum": 0.9,                         # SGD momentum                             (-mom)
+        "scheduler": "cosine",                   # cosine | multistep | none                (-lrm / -gamma -> multistep)
+        "lr_milestones": [10],                   # multistep: epochs at which the lr is multiplied by lr_gamma
+        "lr_gamma": 0.1,
+        "train_prop": 1.0,                       # final model: share of cases trained on; the rest chooses the
+                                                 # threshold, the best epoch and early stopping (-tr_prop)
+        "early_stop": 0,                         # epochs without validation gain before stopping; 0 = off (-es)
+        "checkpoint": "last",                    # last | best | everyN: the state kept as final/model.pt (-cp_type)
+        "checkpoint_every": 10,                  # everyN: also final/model_epoch<N>.pt every N epochs (-cp_n)
+        "resume": False,                         # save final/resume.pt every epoch and continue from it (-sv_resume)
+        "save_full_model": False,                # also final/model_full.pt (torch.save of the module) (-sv_mod)
+        "multi_gpu": False,                      # torch.nn.DataParallel over all visible GPUs (-mgpu)
+        "subjects_per_epoch": 0,                 # draw each epoch's patches from this many random cases; 0 = all (-bfactor)
+        "aug_factor": 1,                         # patches per epoch = n_patches x aug_factor, each randomly flipped (-af)
+        "finetune_layers": [],                   # train only these levels, counted from the output (1 = last decoder
+                                                 # level + head ... 5 = bottleneck ... 9 = first encoder level); [] = all (-ftlayers)
     },
     "selection": {                               # chosen on the INNER fold, never on the test fold
         "thresholds": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
@@ -80,6 +99,9 @@ DEFAULTS: Dict[str, Any] = {
         "init_from": None,                       # fine-tune from a classifier (run folder, classifier.pt, models/cmb_classifier)
         "low_threshold": 0.15, "min_voxels": 4, "max_voxels": 2100,
         "members": 3, "epochs": 40, "batch_size": 16, "lr": 1.0e-3, "weight_decay": 1.0e-3,
+        "method": "cnn",                         # cnn (released classifier) | teacher_student (MicrobleedNet step 2)
+        "kd_temperature": 4.0,                   # teacher_student: softmax temperature of the distillation (MicrobleedNet: 4)
+        "kd_alpha": 0.4,                         # teacher_student: weight of the distillation term (MicrobleedNet: 0.4)
     },
     "postprocess": {
         "csf_rule": False,                       # drop components whose majority SynthSeg label is CSF

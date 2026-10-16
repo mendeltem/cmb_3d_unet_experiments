@@ -110,6 +110,74 @@ class EpochPatches:
         return torch.from_numpy(self.xs[self.idx]), torch.from_numpy(self.ys[self.idx])
 
 
+def epoch_patches(recs: Dict[str, PreparedCase], train_ids: List[str], rng: np.random.RandomState, T: Dict):
+    """One epoch of patches with the MicrobleedNet options: ``subjects_per_epoch`` (-bfactor) draws them from that many
+    random cases, ``aug_factor`` (-af) multiplies their number. Both at their defaults (0, 1) = ``sample_patches``."""
+    ids = train_ids
+    k = int(T.get("subjects_per_epoch") or 0)
+    if 0 < k < len(train_ids):
+        ids = [train_ids[i] for i in sorted(rng.choice(len(train_ids), k, replace=False))]
+    af = int(T.get("aug_factor") or 1)
+    return sample_patches(recs, ids, rng, T if af == 1 else dict(T, n_patches=int(T["n_patches"]) * af))
+
+
+def make_optimizer(params, T: Dict):
+    name, lr = T.get("optimizer", "adamw"), float(T["lr"])
+    if name == "adamw":
+        return torch.optim.AdamW(params, lr=lr, weight_decay=float(T["weight_decay"]), eps=float(T.get("epsilon", 1e-8)))
+    if name == "adam":                                   # as MicrobleedNet: Adam without weight decay
+        return torch.optim.Adam(params, lr=lr, eps=float(T.get("epsilon", 1e-8)))
+    if name == "sgd":
+        return torch.optim.SGD(params, lr=lr, momentum=float(T.get("momentum", 0.9)))
+    raise SystemExit(f"train.optimizer must be adamw, adam or sgd; got {name!r}")
+
+
+def make_scheduler(opt, T: Dict, epochs: int):
+    name = T.get("scheduler", "cosine")
+    if name == "cosine":
+        return torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+    if name == "multistep":                              # as MicrobleedNet: lr x gamma at every milestone epoch
+        ms = T.get("lr_milestones") or [10]
+        return torch.optim.lr_scheduler.MultiStepLR(opt, milestones=[int(m) for m in (ms if isinstance(ms, list) else [ms])],
+                                                    gamma=float(T.get("lr_gamma", 0.1)))
+    if name == "none":
+        return None
+    raise SystemExit(f"train.scheduler must be cosine, multistep or none; got {name!r}")
+
+
+# levels counted from the output, as MicrobleedNet's -ftlayers counts decoder layers from the end
+LEVELS = {1: ("head", "dec0", "up0"), 2: ("dec1", "up1"), 3: ("dec2", "up2"), 4: ("dec3", "up3"), 5: ("bottleneck",),
+          6: ("enc3",), 7: ("enc2",), 8: ("enc1",), 9: ("enc0",)}
+
+
+def apply_finetune_layers(model: torch.nn.Module, layers, log=print) -> None:
+    """Freeze every parameter outside the listed levels (``LEVELS``); empty = train all."""
+    if not layers:
+        return
+    layers = [int(x) for x in (layers if isinstance(layers, (list, tuple)) else [layers])]
+    bad = [x for x in layers if x not in LEVELS]
+    if bad:
+        raise SystemExit(f"train.finetune_layers: levels are 1 (output) ... 9 (input); got {bad}")
+    keep = tuple(n for x in layers for n in LEVELS[x])
+    n_train = 0
+    for name, p in model.named_parameters():
+        short = name.split(".", 1)[1] if name.startswith("net.") else name
+        p.requires_grad = short.split(".")[0] in keep
+        n_train += p.numel() if p.requires_grad else 0
+    log(f"fine-tuning levels {layers} ({', '.join(keep)}): {n_train:,} trainable parameters")
+
+
+def wrap_multi_gpu(model: torch.nn.Module, T: Dict, device: str, log=print) -> torch.nn.Module:
+    if T.get("multi_gpu") and device.startswith("cuda") and torch.cuda.device_count() > 1:
+        log(f"multi-GPU: DataParallel over {torch.cuda.device_count()} GPUs")
+        return torch.nn.DataParallel(model)
+    return model
+
+
+def unwrap(model: torch.nn.Module) -> torch.nn.Module:
+    return model.module if isinstance(model, torch.nn.DataParallel) else model
+
+
 # ---------------------------------------------------------------- loss
 def loss_bce_dice(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     """0.5 * BCE + 0.5 * (1 - soft Dice per patch, smoothing 1), mean over the batch."""
@@ -167,10 +235,11 @@ def train_fold(cfg: Dict, recs: Dict[str, PreparedCase], split: Dict, k: int, ou
     if T.get("init_from"):                                    # fine-tuning from a pretrained model
         from .model import init_from_pretrained
         init_info = init_from_pretrained(model, T["init_from"], T["channels"], T.get("init_channels"), log)
-    model = model.to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=float(T["lr"]), weight_decay=float(T["weight_decay"]))
+    apply_finetune_layers(model, T.get("finetune_layers"), log)
+    model = wrap_multi_gpu(model.to(device), T, device, log)
+    opt = make_optimizer([p for p in model.parameters() if p.requires_grad], T)
     max_ep = int(T["epochs"])
-    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max_ep)
+    sched = make_scheduler(opt, T, max_ep)
     loss_fn = LOSSES[T["loss"]]
     use_amp = bool(T["amp_bf16"]) and device.startswith("cuda")
     if device.startswith("cuda"):
@@ -190,7 +259,7 @@ def train_fold(cfg: Dict, recs: Dict[str, PreparedCase], split: Dict, k: int, ou
         model.train()
         t_ep = time.time()
         losses = []
-        patches = sample_patches(recs, train_ids, rng, T)
+        patches = epoch_patches(recs, train_ids, rng, T)
         bs = int(T["batch_size"])
         for b0 in range(0, len(patches), bs):
             x2, y2 = (t.to(device) for t in patches.batch(b0, bs))
@@ -200,7 +269,8 @@ def train_fold(cfg: Dict, recs: Dict[str, PreparedCase], split: Dict, k: int, ou
             loss.backward()
             opt.step()
             losses.append(float(loss))
-        sched.step()
+        if sched is not None:
+            sched.step()
         del patches
         row = dict(epoch=ep, loss=round(float(np.mean(losses)), 4), train_s=round(time.time() - t_ep, 1))
         if ep % int(T["eval_every"]) == 0 or ep == max_ep:
@@ -214,7 +284,7 @@ def train_fold(cfg: Dict, recs: Dict[str, PreparedCase], split: Dict, k: int, ou
                        maps_s=round(time.time() - t_k, 1))
             if T.get("use_last_epoch") or best is None or s["f1"] > best["f1"] + 1e-9:
                 best = dict(f1=s["f1"], epoch=ep, threshold=thr, min_size=mind, summary=s,
-                            state={n: t.detach().cpu().clone() for n, t in model.state_dict().items()})
+                            state={n: t.detach().cpu().clone() for n, t in unwrap(model).state_dict().items()})
                 worse = 0
             else:
                 worse += 1
@@ -227,6 +297,7 @@ def train_fold(cfg: Dict, recs: Dict[str, PreparedCase], split: Dict, k: int, ou
         else:
             history.append(row)
     json.dump(history, open(os.path.join(outdir, "history.json"), "w"), indent=1)
+    model = unwrap(model)
     model.load_state_dict(best["state"])
     thr, mind = best["threshold"], best["min_size"]
 

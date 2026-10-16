@@ -1,5 +1,12 @@
 """Command line: ``cmbx <command> ...`` (or ``python -m cmbx ...``).
 
+MicrobleedNet-style (same sub-commands and options as `microbleednet`; one preprocessed folder per dataset):
+  cmbx preprocess -i <scans> -ir _T2starw -o <preprocessed> [-l <masks> -lr _cmb.nii.gz] [-f True]
+  cmbx train -i <preprocessed> -l <preprocessed> -m <model>       [--inpaint/--frst/--csf_rule True|False, -cand_disc True]
+  cmbx fine_tune -i <preprocessed> -l <preprocessed> -m pre -o <model>
+  cmbx evaluate -i <preprocessed> -m <model> -o <output>
+  cmbx cross_validate -i <preprocessed> -l <preprocessed> -o <output> -fold 5
+Configuration-file commands (all settings, docs/DETAILS.md):
   cmbx make-phantoms data/phantoms --n 10              synthetic cases + case list, to try everything without data
   cmbx make-caselist --image "<dir>/{id}/..." --label ... --out <csv>    case list from any layout (patterns)
   cmbx get-model valdo_t2                              pretrained VALDO model -> models/valdo_t2 (predict right away)
@@ -9,7 +16,7 @@
   cmbx split --config configs/baseline.yaml            stratified fold assignment -> data/splits.json
   cmbx cv --config configs/baseline.yaml               5-fold CV (resumable; --folds 0 1 for a subset)
   cmbx run-experiment configs/no_frst.yaml             prepare + split + CV + evaluation + summary in one go
-  cmbx evaluate runs/baseline --mode crossfold --csf-rule   re-score stored maps with other post-processing
+  cmbx rescore runs/baseline --mode crossfold --csf-rule    re-score stored maps with other post-processing
   cmbx compare runs                                    one table of all runs -> runs/summary.csv
   cmbx predict --run runs/baseline --cases new.csv     fold-ensemble prediction for prepared new cases
 Every command that takes --config also takes --set key.sub=value (e.g. --set train.epochs=2).
@@ -33,8 +40,11 @@ def _cfg(args):
 
 
 def cmd_make_phantoms(a):
-    from .synthetic import write_phantom_bids, write_phantom_dataset
-    if a.bids:
+    from .synthetic import write_phantom_bids, write_phantom_dataset, write_phantom_preprocessed
+    if a.preprocessed:
+        write_phantom_preprocessed(a.out, a.n, a.seed, labels=not a.no_labels)
+        _log(f"{a.n} phantom cases -> {a.out}/derivatives/preprocessed/<case>/ ({'no labels' if a.no_labels else 'with labels'})")
+    elif a.bids:
         write_phantom_bids(a.out, a.n, a.seed, labels=not a.no_labels)
         _log(f"{a.n} phantom cases in the BIDS layout -> {a.out} ({'no reference masks' if a.no_labels else 'with reference masks'})")
     else:
@@ -66,8 +76,8 @@ def cmd_make_caselist(a):
 
 def cmd_stage2(a):
     from .stage2 import train_stage2
-    ov = dict(epochs=a.epochs, members=a.members, lr=a.lr)
-    train_stage2(a.run, a.device, a.init, ov, _log)
+    ov = dict(epochs=a.epochs, members=a.members, lr=a.lr, method=a.method, kd_temperature=a.kd_temperature, kd_alpha=a.kd_alpha)
+    train_stage2(a.run, a.device, a.init, ov, _log, out_name=a.out)
 
 
 def cmd_get_model(a):
@@ -123,7 +133,7 @@ def cmd_train_final(a):
     train_final(cfg, os.path.join(cfg["output_root"], cfg["name"]), _log, overwrite=a.overwrite)
 
 
-def cmd_evaluate(a):
+def cmd_rescore(a):
     import yaml
     from .evaluate import evaluate_run
     cfg = yaml.safe_load(open(os.path.join(a.run, "config.yaml")))
@@ -156,7 +166,8 @@ def main(argv=None):
     p.add_argument("--n", type=int, default=10)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--bids", action="store_true", help="write the recommended BIDS layout instead of a flat folder")
-    p.add_argument("--no-labels", action="store_true", help="with --bids: no reference masks (a dataset for inference)")
+    p.add_argument("--preprocessed", action="store_true", help="write a cohort: derivatives/preprocessed/<case>/ (cmbx train -i <out>)")
+    p.add_argument("--no-labels", action="store_true", help="with --bids / --preprocessed: no reference masks (for inference)")
     p.set_defaults(fn=cmd_make_phantoms)
 
     p = sub.add_parser("make-caselist", help="case list from any folder layout, given as path patterns with {id}",
@@ -182,6 +193,11 @@ def main(argv=None):
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--members", type=int, default=None)
     p.add_argument("--lr", type=float, default=None)
+    p.add_argument("--method", choices=["cnn", "teacher_student"], default=None,
+                   help="cnn (released classifier) or teacher_student (MicrobleedNet step 2) [stage2.method, cnn]")
+    p.add_argument("--kd_temperature", type=float, default=None, help="teacher_student: temperature [4]")
+    p.add_argument("--kd_alpha", type=float, default=None, help="teacher_student: distillation weight [0.4]")
+    p.add_argument("--out", default=None, help="write into <run>/<out> instead of <run>/stage2 (compare methods)")
     p.add_argument("--device", default="auto")
     p.set_defaults(fn=cmd_stage2)
 
@@ -231,13 +247,16 @@ def main(argv=None):
     p.add_argument("--overwrite", action="store_true", help="train again even if final/model.pt exists")
     p.set_defaults(fn=cmd_train_final)
 
-    p = sub.add_parser("evaluate", help="(re-)score a finished run")
+    p = sub.add_parser("rescore", help="(re-)score a finished run with other post-processing")
     p.add_argument("run")
     p.add_argument("--mode", choices=["stored", "inner", "crossfold"], default="stored")
     p.add_argument("--csf-rule", action="store_true", help="apply the SynthSeg CSF rule (needs tissue maps)")
     p.add_argument("--prepared", default=None, help="prepared folder (default: from the run's config.yaml)")
     p.add_argument("--tag", default=None, help="name of the output files evaluation-<tag>.json")
-    p.set_defaults(fn=cmd_evaluate)
+    p.set_defaults(fn=cmd_rescore)
+
+    from .workflow import add_parsers                  # MicrobleedNet-style: preprocess, train, fine_tune, evaluate, cross_validate
+    add_parsers(sub, _log)
 
     p = sub.add_parser("compare", help="table of all runs under a folder")
     p.add_argument("root", nargs="?", default="runs")

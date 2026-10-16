@@ -98,3 +98,28 @@ def test_stage2_enabled_in_run_experiment(tmp_path):
     st2 = tmp_path / "runs" / "e" / "stage2" / "classifier.pt"
     assert st2.exists() or any("stage 2 not trained" in m for m in msgs)    # tiny first stage: maybe no candidates
     assert os.path.exists(tmp_path / "runs" / "e" / "final" / "model.pt")
+
+
+def test_teacher_student(run):
+    """MicrobleedNet's step 2: teacher (Tf + Ts + Tc) trained, student distilled; nested CV, bundle, predict."""
+    from cmbx.predict_cli import predict_run
+    from cmbx.stage2 import StudentNet, TeacherNet
+    tmp, r, _ = run
+    t, st = TeacherNet(), StudentNet()
+    x = torch.zeros(2, 2, 16, 32, 32)
+    logits, seg = t(x)
+    assert logits.shape == (2, 2) and seg.shape == (2, 1, 16, 32, 32) and st(x).shape == (2, 2)
+    s = train_stage2(r, "cpu", overrides=dict(method="teacher_student"), log=QUIET, out_name="stage2_ts")
+    assert s["method"] == "teacher_student" and 0 <= s["stage2_cv"]["f1"] <= 1
+    path = os.path.join(r, "stage2_ts", "classifier.pt")
+    b = load_bundle(path)
+    assert b["method"] == "teacher_student" and len(b["members"]) == len(b["teachers"]) == 1 and b["kd_temperature"] == 4.0
+    img = os.path.join(tmp, "ph", "phantom-02", "phantom-02_image.nii.gz")
+    predict_run(r, out=str(tmp / "pts"), image=img, brain_mask=img.replace("_image", "_brain"), case_id="c", device="cpu",
+                log=QUIET, stage2=path)
+    assert json.load(open(tmp / "pts" / "c.json"))["stage2"]["classifier"] == path
+    cnn = os.path.join(r, "stage2", "classifier.pt")
+    if not os.path.exists(cnn):
+        train_stage2(r, "cpu", log=QUIET)
+    with pytest.raises(SystemExit, match="cnn"):           # a cnn classifier cannot initialise a teacher-student
+        train_stage2(r, "cpu", init=cnn, overrides=dict(method="teacher_student", epochs=1), log=QUIET, out_name="x")

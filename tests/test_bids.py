@@ -2,6 +2,7 @@
 layout) -> make-caselist --bids -> run-experiment -> new data without references (examples/bids_new layout) ->
 make-caselist --bids -> predict on the input grid."""
 import csv
+import glob
 import os
 
 import nibabel as nib
@@ -49,9 +50,15 @@ def test_bids_train_then_predict(tmp_path):
     assert m.shape == src.shape and np.allclose(m.affine, src.affine)
 
 
-def test_shipped_examples_match_the_layout():
-    """examples/bids_train and examples/bids_new in the repository are what make-phantoms --bids writes."""
-    tr, nw = bids_patterns(os.path.join(ROOT, "examples", "bids_train")), bids_patterns(os.path.join(ROOT, "examples", "bids_new"))
-    assert {"image", "label", "brain_mask", "tissue_map", "ids"} <= set(tr) and "label" not in nw
-    ids = [r["participant_id"] for r in csv.DictReader(open(tr["ids"]), delimiter="\t")]
-    assert ids == [f"sub-{i:03d}" for i in range(1, 11)]
+def test_shipped_examples_match_the_layout(tmp_path):
+    """examples/train and examples/new in the repository are what make-phantoms --preprocessed writes."""
+    import filecmp
+    from cmbx.synthetic import write_phantom_preprocessed
+    for name, n, seed, labels in (("train", 10, 0, True), ("new", 2, 7, False)):
+        ref = write_phantom_preprocessed(str(tmp_path / name), n, seed, labels=labels)
+        a = sorted(os.path.relpath(f, ref) for f in glob.glob(os.path.join(ref, "**", "*.*"), recursive=True))
+        b = sorted(os.path.relpath(f, os.path.join(ROOT, "examples", name))
+                   for f in glob.glob(os.path.join(ROOT, "examples", name, "**", "*.*"), recursive=True))
+        assert a == b, name
+        assert all(filecmp.cmp(os.path.join(ref, f), os.path.join(ROOT, "examples", name, f), shallow=False) for f in a
+                   if f.endswith(".tsv"))

@@ -328,7 +328,16 @@ def prepare_case(case: Dict, out_dir: str, pp: Dict, overwrite: bool = False) ->
             raise ValueError(f"extra channel name {name!r} is reserved")
         if not case.get(col):
             raise ValueError(f"{sid}: extra channel {name!r} needs the case-list column {col!r}")
-        ex = _squeeze(np.asarray(same_grid(case[col]).dataobj, dtype=np.float32))
+        ex_img = load_nifti(case[col], pp["reorient"])
+        if ex_img.shape[:3] != image.shape:             # e.g. FLAIR of the same session on its own grid:
+            import nibabel.processing                   # linear resampling in world coordinates onto the image
+            if ex_img.ndim == 4:
+                ex_img = ex_img.slicer[..., 0]
+            ex_img = nibabel.processing.resample_from_to(ex_img, (image.shape, src.affine), order=1)
+            affine_offsets[os.path.basename(case[col])] = "resampled in world coordinates"
+        else:
+            same_grid(case[col])
+        ex = _squeeze(np.asarray(ex_img.dataobj, dtype=np.float32))
         v = ex[mask]
         lo_, hi_ = (np.percentile(v, [0.5, 99.5]) if v.size else (0.0, 1.0))
         ex = np.where(mask, np.clip((ex - lo_) / max(hi_ - lo_, 1e-6), 0, 1), 0).astype(np.float32)

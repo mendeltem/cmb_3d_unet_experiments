@@ -1,113 +1,251 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" font-family="Helvetica, Arial, sans-serif">
-  <defs>
-    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
-    </marker>
-    <style>
-      .box{fill:#ffffff;stroke:#94a3b8;stroke-width:1.5;rx:8}
-      .data{fill:#eff6ff;stroke:#3b82f6}
-      .train{fill:#f0fdf4;stroke:#22c55e}
-      .opt{fill:#fff7ed;stroke:#f97316;stroke-dasharray:5 3}
-      .out{fill:#faf5ff;stroke:#a855f7}
-      .t{font-size:14px;font-weight:700;fill:#0f172a}
-      .s{font-size:11.5px;fill:#334155}
-      .c{font-size:11px;fill:#64748b;font-family:Menlo, Consolas, monospace}
-      .h{font-size:16px;font-weight:700;fill:#0f172a}
-      .ln{stroke:#475569;stroke-width:1.6;fill:none;marker-end:url(#a)}
-      .skip{stroke:#94a3b8;stroke-width:1.3;fill:none;stroke-dasharray:4 3;marker-end:url(#a)}
-      .lvl{fill:#ecfdf5;stroke:#22c55e;stroke-width:1.3}
-      .lvl2{fill:#fff7ed;stroke:#f97316;stroke-width:1.3}
-    </style>
-  </defs>
-  <rect width="960" height="600" fill="#ffffff"/>
-
-  <text class="h" x="20" y="28">How it works</text>
-  <!-- row 1 -->
-  <rect class="box data" x="20" y="45" width="205" height="80" rx="8"/>
-  <text class="t" x="32" y="68">1  Your data (BIDS)</text>
-  <text class="s" x="32" y="88">bias-corrected T2* / SWI,</text>
-  <text class="s" x="32" y="104">brain mask, CMB mask</text>
-  <text class="c" x="32" y="119">examples/bids_train</text>
-
-  <rect class="box data" x="255" y="45" width="205" height="80" rx="8"/>
-  <text class="t" x="267" y="68">2  Case list</text>
-  <text class="s" x="267" y="88">one row per scan, 5 folds</text>
-  <text class="c" x="267" y="119">cmbx make-caselist</text>
-
-  <rect class="box train" x="490" y="45" width="205" height="80" rx="8"/>
-  <text class="t" x="502" y="68">3  Prepare</text>
-  <text class="s" x="502" y="88">0.5 x 0.5 x 1 mm grid,</text>
-  <text class="s" x="502" y="104">image + FRST channel</text>
-  <text class="c" x="502" y="119">cmbx prepare (automatic)</text>
-
-  <rect class="box train" x="725" y="45" width="215" height="80" rx="8"/>
-  <text class="t" x="737" y="68">4  5-fold CV</text>
-  <text class="s" x="737" y="88">3D U-Net per fold, threshold</text>
-  <text class="s" x="737" y="104">chosen on an inner fold</text>
-  <text class="c" x="737" y="119">cmbx run-experiment</text>
-
-  <!-- row 2 -->
-  <rect class="box train" x="725" y="165" width="215" height="80" rx="8"/>
-  <text class="t" x="737" y="188">5  Final model</text>
-  <text class="s" x="737" y="208">one U-Net on all cases</text>
-  <text class="c" x="737" y="239">runs/&lt;name&gt;/final</text>
-
-  <rect class="box opt" x="490" y="165" width="205" height="80" rx="8"/>
-  <text class="t" x="502" y="188">6  Stage 2 (optional)</text>
-  <text class="s" x="502" y="208">small 3D CNN re-checks</text>
-  <text class="s" x="502" y="224">every candidate</text>
-  <text class="c" x="502" y="239">cmbx stage2</text>
-
-  <rect class="box out" x="255" y="165" width="205" height="80" rx="8"/>
-  <text class="t" x="267" y="188">7  Predict</text>
-  <text class="s" x="267" y="208">masks + lesion list on the</text>
-  <text class="s" x="267" y="224">grid of the input scan</text>
-  <text class="c" x="267" y="239">cmbx predict</text>
-
-  <rect class="box opt" x="20" y="165" width="205" height="80" rx="8"/>
-  <text class="t" x="32" y="188">Pretrained (optional)</text>
-  <text class="s" x="32" y="208">VALDO U-Net: predict now,</text>
-  <text class="s" x="32" y="224">or fine-tune (init_from)</text>
-  <text class="c" x="32" y="239">models/valdo_t2</text>
-
-  <path class="ln" d="M225,85 L253,85"/>
-  <path class="ln" d="M460,85 L488,85"/>
-  <path class="ln" d="M695,85 L723,85"/>
-  <path class="ln" d="M832,125 L832,163"/>
-  <path class="ln" d="M725,205 L697,205"/>
-  <path class="ln" d="M490,205 L462,205"/>
-  <path class="ln" d="M225,205 L253,205"/>
-  <path class="skip" d="M122,165 C122,140 640,140 760,126"/>
-  <text class="s" x="300" y="152" font-style="italic">fine-tune: train.init_from=models/valdo_t2</text>
-
-  <!-- networks -->
-  <text class="h" x="20" y="300">Stage 1: anisotropic 3D U-Net (2 input channels: image, FRST; patch 38 x 62 x 94 voxels)</text>
-  <g>
-    <rect class="lvl" x="40" y="320" width="175" height="36" rx="6"/><text class="s" x="50" y="343">32 ch, 1x3x3 conv (in-plane)</text>
-    <rect class="lvl" x="100" y="372" width="150" height="36" rx="6"/><text class="s" x="110" y="395">64 ch, 3x3x3</text>
-    <rect class="lvl" x="140" y="424" width="150" height="36" rx="6"/><text class="s" x="150" y="447">128 ch, 3x3x3</text>
-    <rect class="lvl" x="180" y="476" width="150" height="36" rx="6"/><text class="s" x="190" y="499">256 ch, 3x3x3</text>
-    <rect class="lvl" x="290" y="528" width="160" height="36" rx="6"/><text class="s" x="300" y="551">512 ch bottleneck</text>
-    <rect class="lvl" x="590" y="320" width="150" height="36" rx="6"/><text class="s" x="600" y="343">32 ch, 1x3x3</text>
-    <rect class="lvl" x="550" y="372" width="150" height="36" rx="6"/><text class="s" x="560" y="395">64 ch</text>
-    <rect class="lvl" x="510" y="424" width="150" height="36" rx="6"/><text class="s" x="520" y="447">128 ch</text>
-    <rect class="lvl" x="470" y="476" width="150" height="36" rx="6"/><text class="s" x="480" y="499">256 ch</text>
-    <path class="ln" d="M120,356 L150,370"/><path class="ln" d="M160,408 L190,422"/><path class="ln" d="M200,460 L230,474"/><path class="ln" d="M250,512 L310,526"/>
-    <path class="ln" d="M430,528 L500,514"/><path class="ln" d="M560,476 L580,462"/><path class="ln" d="M600,424 L620,410"/><path class="ln" d="M640,372 L660,358"/>
-    <path class="skip" d="M215,338 L588,338"/><path class="skip" d="M250,390 L548,390"/><path class="skip" d="M290,442 L508,442"/><path class="skip" d="M330,494 L468,494"/>
-    <text class="s" x="345" y="332">skip connections</text>
-    <text class="s" x="14" y="343">in</text>
-    <path class="ln" d="M740,338 L770,338"/><text class="s" x="775" y="335">probability</text><text class="s" x="775" y="350">per voxel</text>
-    <text class="c" x="60" y="590">pooling 1x2x2 after the first level (keeps the thin slices), 2x2x2 below</text>
-  </g>
-  <g>
-    <rect class="lvl2" x="775" y="395" width="170" height="150" rx="8"/>
-    <text class="t" x="787" y="418">Stage 2 (optional)</text>
-    <text class="s" x="787" y="440">per candidate (p &gt; 0.15):</text>
-    <text class="s" x="787" y="456">16 x 32 x 32 block of</text>
-    <text class="s" x="787" y="472">image, FRST, probability</text>
-    <text class="s" x="787" y="492">CNN 16 / 32 / 64 ch</text>
-    <text class="s" x="787" y="508">-> microbleed yes/no</text>
-    <text class="s" x="787" y="528">3 members averaged</text>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1010" viewBox="0 0 1180 1010" font-family="Helvetica, Arial, sans-serif">
+<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker></defs>
+<rect width="1180" height="1010" fill="#ffffff"/>
+<rect x="20" y="40" width="1140" height="92" rx="14" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="7 5"/>
+<text x="590.0" y="28" font-size="19" font-weight="700" fill="#0f172a" text-anchor="middle">Preprocessing (cmbx preprocess / train)</text>
+<rect x="40" y="62" width="196" height="52" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+<text x="138" y="84" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">scan + brain mask</text>
+<text x="138" y="102" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">bias-corrected T2* or SWI</text>
+<rect x="266" y="62" width="196" height="52" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-dasharray="5 3"/>
+<text x="364" y="84" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">vessel inpainting</text>
+<text x="364" y="102" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">off; --inpaint True</text>
+<line x1="238" y1="88" x2="263" y2="88" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+<rect x="492" y="62" width="196" height="52" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+<text x="590" y="84" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">0.5 x 0.5 x 1 mm grid</text>
+<text x="590" y="102" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">cropped to the brain</text>
+<line x1="464" y1="88" x2="489" y2="88" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+<rect x="718" y="62" width="196" height="52" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+<text x="816" y="84" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">invert: 1 - I / max</text>
+<text x="816" y="102" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">inside the brain mask</text>
+<line x1="690" y1="88" x2="715" y2="88" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+<rect x="944" y="62" width="196" height="52" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-dasharray="5 3"/>
+<text x="1042" y="84" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">FRST</text>
+<text x="1042" y="102" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">radii 2, 3, 4, 6 voxels; --frst</text>
+<line x1="916" y1="88" x2="941" y2="88" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+<rect x="20" y="175" width="1140" height="330" rx="14" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="7 5"/>
+<text x="590.0" y="163" font-size="19" font-weight="700" fill="#0f172a" text-anchor="middle">Step 1: 3D CMB candidate detection network (anisotropic 3D U-Net)</text>
+<rect x="40" y="245" width="92" height="92" rx="3" fill="#1e293b"/>
+<ellipse cx="86" cy="291" rx="34" ry="40" fill="#94a3b8" opacity="0.85"/>
+<ellipse cx="86" cy="291" rx="20" ry="25" fill="#cbd5e1" opacity="0.8"/>
+<line x1="63" y1="245" x2="63" y2="337" stroke="#fbbf24" stroke-width="0.8" stroke-dasharray="3 2"/>
+<line x1="40" y1="268" x2="132" y2="268" stroke="#fbbf24" stroke-width="0.8" stroke-dasharray="3 2"/>
+<line x1="86" y1="245" x2="86" y2="337" stroke="#fbbf24" stroke-width="0.8" stroke-dasharray="3 2"/>
+<line x1="40" y1="291" x2="132" y2="291" stroke="#fbbf24" stroke-width="0.8" stroke-dasharray="3 2"/>
+<line x1="109" y1="245" x2="109" y2="337" stroke="#fbbf24" stroke-width="0.8" stroke-dasharray="3 2"/>
+<line x1="40" y1="314" x2="132" y2="314" stroke="#fbbf24" stroke-width="0.8" stroke-dasharray="3 2"/>
+<text x="86" y="355" font-size="11.5" font-weight="600" fill="#0f172a" text-anchor="middle">patches 38 x 62 x 94</text>
+<text x="86" y="370" font-size="11" font-weight="400" fill="#475569" text-anchor="middle">(z, y, x) of the volume</text>
+<rect x="40" y="372" width="92" height="92" rx="3" fill="#1e293b"/>
+<ellipse cx="86" cy="418" rx="34" ry="40" fill="#94a3b8" opacity="0.85"/>
+<ellipse cx="86" cy="418" rx="20" ry="25" fill="#cbd5e1" opacity="0.8"/>
+<line x1="63" y1="372" x2="63" y2="464" stroke="#fbbf24" stroke-width="0.8" stroke-dasharray="3 2"/>
+<line x1="40" y1="395" x2="132" y2="395" stroke="#fbbf24" stroke-width="0.8" stroke-dasharray="3 2"/>
+<line x1="86" y1="372" x2="86" y2="464" stroke="#fbbf24" stroke-width="0.8" stroke-dasharray="3 2"/>
+<line x1="40" y1="418" x2="132" y2="418" stroke="#fbbf24" stroke-width="0.8" stroke-dasharray="3 2"/>
+<line x1="109" y1="372" x2="109" y2="464" stroke="#fbbf24" stroke-width="0.8" stroke-dasharray="3 2"/>
+<line x1="40" y1="441" x2="132" y2="441" stroke="#fbbf24" stroke-width="0.8" stroke-dasharray="3 2"/>
+<text x="86" y="482" font-size="11.5" font-weight="600" fill="#0f172a" text-anchor="middle">the same patches</text>
+<text x="86" y="497" font-size="11" font-weight="400" fill="#475569" text-anchor="middle">of the FRST map</text>
+<text x="150" y="236" font-size="10.5" font-weight="400" fill="#0f172a" text-anchor="start" font-family="Menlo, Consolas, monospace">in: 40x64x96 x 2 (image + FRST)</text>
+<line x1="140" y1="300" x2="196" y2="330" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+<line x1="140" y1="410" x2="196" y2="380" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+<path d="M205,250.0 l10,-10 h14 v100 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="205" y="250.0" width="14" height="100" fill="#334155"/>
+<path d="M227,250.0 l10,-10 h14.5 v100 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="227" y="250.0" width="14.5" height="100" fill="#334155"/>
+<text x="223" y="368.0" font-size="10.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">40x64x96 x 32</text>
+<polygon points="266,369.0 276,369.0 271,378.0" fill="#16a34a"/>
+<line x1="255" y1="300" x2="294" y2="330" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M300,292.0 l10,-10 h14 v76 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="300" y="292.0" width="14" height="76" fill="#334155"/>
+<path d="M322,292.0 l10,-10 h15.0 v76 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="322" y="292.0" width="15.0" height="76" fill="#334155"/>
+<text x="318" y="386.0" font-size="10.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">40x32x48 x 64</text>
+<polygon points="361,383.0 371,383.0 366,392.0" fill="#16a34a"/>
+<line x1="350" y1="330" x2="389" y2="352" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M395,324.0 l10,-10 h14 v56 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="395" y="324.0" width="14" height="56" fill="#334155"/>
+<path d="M417,324.0 l10,-10 h16.0 v56 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="417" y="324.0" width="16.0" height="56" fill="#334155"/>
+<text x="413" y="398.0" font-size="10.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">20x16x24 x 128</text>
+<polygon points="456,392.0 466,392.0 461,401.0" fill="#16a34a"/>
+<line x1="445" y1="352" x2="484" y2="368" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M490,348.0 l10,-10 h14 v40 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="490" y="348.0" width="14" height="40" fill="#334155"/>
+<path d="M512,348.0 l10,-10 h18.0 v40 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="512" y="348.0" width="18.0" height="40" fill="#334155"/>
+<text x="508" y="406.0" font-size="10.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">10x8x12 x 256</text>
+<polygon points="551,398.0 561,398.0 556,407.0" fill="#16a34a"/>
+<line x1="540" y1="368" x2="579" y2="380" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M585,366.0 l7.0,-7.0 h14 v28 l-7.0,7.0 z" fill="#334155" opacity="0.55"/>
+<rect x="585" y="366.0" width="14" height="28" fill="#334155"/>
+<path d="M607,366.0 l7.0,-7.0 h22.0 v28 l-7.0,7.0 z" fill="#334155" opacity="0.55"/>
+<rect x="607" y="366.0" width="22.0" height="28" fill="#334155"/>
+<text x="603" y="412.0" font-size="10.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">5x4x6 x 512</text>
+<path d="M990,250.0 l10,-10 h14.5 v100 l-10,10 z" fill="#64748b" opacity="0.55"/>
+<rect x="990" y="250.0" width="14.5" height="100" fill="#64748b"/>
+<path d="M1016,250.0 l10,-10 h14 v100 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="1016" y="250.0" width="14" height="100" fill="#334155"/>
+<text x="1012" y="368.0" font-size="10.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">40x64x96 x 32</text>
+<line x1="255" y1="238.0" x2="984" y2="238.0" stroke="#94a3b8" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<polygon points="971,300 981,300 976,291" fill="#dc2626"/>
+<path d="M900,292.0 l10,-10 h15.0 v76 l-10,10 z" fill="#64748b" opacity="0.55"/>
+<rect x="900" y="292.0" width="15.0" height="76" fill="#64748b"/>
+<path d="M926,292.0 l10,-10 h14 v76 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="926" y="292.0" width="14" height="76" fill="#334155"/>
+<text x="922" y="386.0" font-size="10.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">40x32x48 x 64</text>
+<line x1="350" y1="280.0" x2="894" y2="280.0" stroke="#94a3b8" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<polygon points="881,330 891,330 886,321" fill="#dc2626"/>
+<path d="M810,324.0 l10,-10 h16.0 v56 l-10,10 z" fill="#64748b" opacity="0.55"/>
+<rect x="810" y="324.0" width="16.0" height="56" fill="#64748b"/>
+<path d="M836,324.0 l10,-10 h14 v56 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="836" y="324.0" width="14" height="56" fill="#334155"/>
+<text x="832" y="398.0" font-size="10.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">20x16x24 x 128</text>
+<line x1="445" y1="312.0" x2="804" y2="312.0" stroke="#94a3b8" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<polygon points="791,352 801,352 796,343" fill="#dc2626"/>
+<path d="M720,348.0 l10,-10 h18.0 v40 l-10,10 z" fill="#64748b" opacity="0.55"/>
+<rect x="720" y="348.0" width="18.0" height="40" fill="#64748b"/>
+<path d="M746,348.0 l10,-10 h14 v40 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="746" y="348.0" width="14" height="40" fill="#334155"/>
+<text x="742" y="406.0" font-size="10.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">10x8x12 x 256</text>
+<line x1="540" y1="336.0" x2="714" y2="336.0" stroke="#94a3b8" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<polygon points="701,368 711,368 706,359" fill="#dc2626"/>
+<line x1="640" y1="380" x2="714" y2="368" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<line x1="760" y1="368" x2="806" y2="352" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<line x1="850" y1="352" x2="896" y2="330" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<line x1="940" y1="330" x2="986" y2="300" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M1085,250 l10,-10 h10 v100 l-10,10 z" fill="#0e7490" opacity="0.55"/>
+<rect x="1085" y="250" width="10" height="100" fill="#0e7490"/>
+<text x="1092" y="388" font-size="10.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">40x64x96 x 1</text>
+<line x1="1056" y1="300" x2="1080" y2="300" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+<text x="1092" y="236" font-size="11.5" font-weight="600" fill="#0f172a" text-anchor="middle">probability</text>
+<rect x="205" y="446" width="12" height="10" fill="#334155"/>
+<text x="223" y="455" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start">(1x)3x3 conv + instance norm + LeakyReLU, twice; level 1 in-plane only</text>
+<rect x="635" y="446" width="12" height="10" fill="#16a34a"/>
+<text x="653" y="455" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start">max pooling (first 1x2x2, then 2x2x2)</text>
+<rect x="205" y="466" width="12" height="10" fill="#dc2626"/>
+<text x="223" y="475" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start">transposed convolution (upsampling)</text>
+<rect x="635" y="466" width="12" height="10" fill="#94a3b8"/>
+<text x="653" y="475" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start">copy and concatenate (skip connection)</text>
+<text x="1070" y="415" font-size="11" font-weight="400" fill="#475569" text-anchor="middle">threshold + min size</text>
+<text x="1070" y="430" font-size="11" font-weight="400" fill="#475569" text-anchor="middle">chosen on held-out cases;</text>
+<text x="1070" y="445" font-size="11" font-weight="400" fill="#475569" text-anchor="middle">CSF rule: --csf_rule</text>
+<rect x="20" y="550" width="1140" height="440" rx="14" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="7 5"/>
+<text x="590.0" y="538" font-size="19" font-weight="700" fill="#0f172a" text-anchor="middle">Step 2 (optional, -cand_disc True): candidate discrimination, teacher-student as in MicrobleedNet</text>
+<rect x="40" y="572" width="1100" height="190" rx="10" fill="#f8fafc" stroke="#94a3b8"/>
+<text x="56" y="594" font-size="14" font-weight="700" fill="#0f172a" text-anchor="start">TEACHER NETWORK</text>
+<rect x="56" y="610" width="92" height="92" rx="3" fill="#1e293b"/>
+<ellipse cx="102" cy="656" rx="34" ry="40" fill="#94a3b8" opacity="0.85"/>
+<ellipse cx="102" cy="656" rx="20" ry="25" fill="#cbd5e1" opacity="0.8"/>
+<text x="102" y="720" font-size="11.5" font-weight="600" fill="#0f172a" text-anchor="middle">16 x 32 x 32 crop</text>
+<text x="102" y="735" font-size="11" font-weight="400" fill="#475569" text-anchor="middle">around each candidate</text>
+<text x="56" y="752" font-size="11" font-weight="400" fill="#475569" text-anchor="start">image + FRST</text>
+<rect x="185" y="600" width="330" height="150" rx="10" fill="none" stroke="#eab308" stroke-width="1.6"/>
+<text x="195" y="617" font-size="12" font-weight="700" fill="#a16207" text-anchor="start">Feature extractor Tf</text>
+<path d="M200,645.0 l10,-10 h6 v70 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="200" y="645.0" width="6" height="70" fill="#334155"/>
+<text x="203.0" y="731.0" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">16x32x32 x 3</text>
+<line x1="212" y1="680" x2="270" y2="680" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M280,645.0 l10,-10 h14 v70 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="280" y="645.0" width="14" height="70" fill="#334155"/>
+<text x="287.0" y="731.0" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">16x32x32 x 32</text>
+<line x1="300" y1="680" x2="350" y2="680" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M360,654.0 l10,-10 h16 v52 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="360" y="654.0" width="16" height="52" fill="#334155"/>
+<text x="368.0" y="722.0" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">16x16x16 x 64</text>
+<line x1="382" y1="680" x2="430" y2="680" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M440,662.0 l9.0,-9.0 h20 v36 l-9.0,9.0 z" fill="#334155" opacity="0.55"/>
+<rect x="440" y="662.0" width="20" height="36" fill="#334155"/>
+<text x="450.0" y="714.0" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">8x8x8 x 128</text>
+<line x1="160" y1="660" x2="196" y2="670" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+<rect x="530" y="600" width="290" height="150" rx="10" fill="none" stroke="#0e7490" stroke-width="1.6"/>
+<text x="540" y="617" font-size="12" font-weight="700" fill="#0e7490" text-anchor="start">Voxel-wise segmentor Ts</text>
+<path d="M560,654.0 l10,-10 h16 v52 l-10,10 z" fill="#64748b" opacity="0.55"/>
+<rect x="560" y="654.0" width="16" height="52" fill="#64748b"/>
+<text x="568.0" y="722.0" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">16x16x16 x 64</text>
+<line x1="582" y1="680" x2="642" y2="680" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M650,645.0 l10,-10 h14 v70 l-10,10 z" fill="#64748b" opacity="0.55"/>
+<rect x="650" y="645.0" width="14" height="70" fill="#64748b"/>
+<text x="657.0" y="731.0" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">16x32x32 x 32</text>
+<line x1="670" y1="680" x2="732" y2="680" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M740,645.0 l10,-10 h6 v70 l-10,10 z" fill="#0e7490" opacity="0.55"/>
+<rect x="740" y="645.0" width="6" height="70" fill="#0e7490"/>
+<text x="743.0" y="731.0" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">16x32x32 x 1</text>
+<line x1="500" y1="668" x2="556" y2="672" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+<text x="835" y="640" font-size="11" font-weight="400" fill="#475569" text-anchor="start">reference voxels:</text>
+<text x="835" y="655" font-size="11" font-weight="400" fill="#475569" text-anchor="start">BCE + soft Dice</text>
+<rect x="830" y="672" width="300" height="80" rx="10" fill="none" stroke="#16a34a" stroke-width="1.6"/>
+<text x="840" y="689" font-size="12" font-weight="700" fill="#15803d" text-anchor="start">Patch classifier Tc</text>
+<path d="M862,707.0 l6.5,-6.5 h14 v26 l-6.5,6.5 z" fill="#334155" opacity="0.55"/>
+<rect x="862" y="707.0" width="14" height="26" fill="#334155"/>
+<text x="869" y="745" font-size="9" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">4^3 x 128</text>
+<path d="M914,712.0 l4,-4 h14 v16 l-4,4 z" fill="#334155" opacity="0.55"/>
+<rect x="914" y="712.0" width="14" height="16" fill="#334155"/>
+<text x="921" y="745" font-size="9" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">2^3 x 128</text>
+<rect x="965" y="704" width="7" height="36" fill="#7c3aed"/>
+<text x="968" y="760" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle">1024</text>
+<rect x="1003" y="704" width="7" height="36" fill="#7c3aed"/>
+<text x="1006" y="700" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle">128</text>
+<rect x="1041" y="704" width="7" height="36" fill="#7c3aed"/>
+<text x="1044" y="760" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle">32</text>
+<rect x="1079" y="712" width="7" height="18" fill="#7c3aed"/>
+<text x="1082" y="700" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle">2</text>
+<path d="M458,700 C 470,768 780,768 856,728" stroke="#475569" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+<text x="1000" y="664" font-size="11" font-weight="400" fill="#475569" text-anchor="middle">CE loss; soft labels at T = 4</text>
+<rect x="420" y="785" width="340" height="34" rx="6" fill="#f5f3ff" stroke="#7c3aed"/>
+<text x="590" y="807" font-size="12.5" font-weight="700" fill="#7c3aed" text-anchor="middle">Knowledge distillation: CE + 0.4 T^2 KL + 0.6 CE</text>
+<path d="M1060,752 C 1060,800 900,802 764,802" stroke="#7c3aed" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+<rect x="40" y="835" width="1100" height="140" rx="10" fill="#f8fafc" stroke="#94a3b8"/>
+<text x="56" y="857" font-size="14" font-weight="700" fill="#0f172a" text-anchor="start">STUDENT NETWORK (applied to new candidates)</text>
+<rect x="60" y="870" width="24" height="24" rx="2" fill="#1e293b"/>
+<circle cx="72" cy="882" r="4" fill="#cbd5e1"/>
+<rect x="90" y="870" width="24" height="24" rx="2" fill="#1e293b"/>
+<circle cx="102" cy="882" r="4" fill="#cbd5e1"/>
+<rect x="120" y="870" width="24" height="24" rx="2" fill="#1e293b"/>
+<circle cx="132" cy="882" r="4" fill="#cbd5e1"/>
+<rect x="60" y="900" width="24" height="24" rx="2" fill="#1e293b"/>
+<circle cx="72" cy="912" r="4" fill="#cbd5e1"/>
+<rect x="90" y="900" width="24" height="24" rx="2" fill="#1e293b"/>
+<circle cx="102" cy="912" r="4" fill="#cbd5e1"/>
+<rect x="120" y="900" width="24" height="24" rx="2" fill="#1e293b"/>
+<circle cx="132" cy="912" r="4" fill="#cbd5e1"/>
+<text x="105" y="948" font-size="11" font-weight="400" fill="#475569" text-anchor="middle">crops of the candidates</text>
+<path d="M200,870.0 l10,-10 h6 v70 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="200" y="870.0" width="6" height="70" fill="#334155"/>
+<text x="203.0" y="955.0" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">16x32x32 x 3</text>
+<line x1="212" y1="905" x2="274" y2="905" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M282,870.0 l10,-10 h14 v70 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="282" y="870.0" width="14" height="70" fill="#334155"/>
+<text x="289.0" y="955.0" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">16x32x32 x 32</text>
+<line x1="302" y1="905" x2="356" y2="905" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M364,879.0 l10,-10 h16 v52 l-10,10 z" fill="#334155" opacity="0.55"/>
+<rect x="364" y="879.0" width="16" height="52" fill="#334155"/>
+<text x="372.0" y="946.0" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">16x16x16 x 64</text>
+<line x1="386" y1="905" x2="438" y2="905" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M446,887.0 l9.0,-9.0 h20 v36 l-9.0,9.0 z" fill="#334155" opacity="0.55"/>
+<rect x="446" y="887.0" width="20" height="36" fill="#334155"/>
+<text x="456.0" y="938.0" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">8x8x8 x 128</text>
+<line x1="472" y1="905" x2="520" y2="905" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M528,892.0 l6.5,-6.5 h14 v26 l-6.5,6.5 z" fill="#334155" opacity="0.55"/>
+<rect x="528" y="892.0" width="14" height="26" fill="#334155"/>
+<text x="535.0" y="933.0" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">4^3 x 128</text>
+<line x1="548" y1="905" x2="602" y2="905" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M610,897.0 l4,-4 h14 v16 l-4,4 z" fill="#334155" opacity="0.55"/>
+<rect x="610" y="897.0" width="14" height="16" fill="#334155"/>
+<text x="617.0" y="928.0" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle" font-family="Menlo, Consolas, monospace">2^3 x 128</text>
+<line x1="630" y1="905" x2="684" y2="905" stroke="#475569" stroke-width="1.2" marker-end="url(#ar)"/>
+<rect x="692" y="887" width="7" height="36" fill="#7c3aed"/>
+<text x="695" y="937" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle">1024</text>
+<rect x="730" y="887" width="7" height="36" fill="#7c3aed"/>
+<text x="733" y="937" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle">128</text>
+<rect x="768" y="887" width="7" height="36" fill="#7c3aed"/>
+<text x="771" y="937" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle">32</text>
+<rect x="806" y="896" width="7" height="18" fill="#7c3aed"/>
+<text x="809" y="937" font-size="9.5" font-weight="400" fill="#0f172a" text-anchor="middle">2</text>
+<text x="902" y="900" font-size="12" font-weight="700" fill="#0f172a" text-anchor="start">microbleed / not</text>
+<text x="902" y="917" font-size="11" font-weight="400" fill="#475569" text-anchor="start">score threshold chosen out of fold</text>
+<text x="902" y="932" font-size="11" font-weight="400" fill="#475569" text-anchor="start">or on held-out cases</text>
+<path d="M590,819 L590,860" stroke="#7c3aed" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+<text x="600" y="850" font-size="11" font-weight="400" fill="#7c3aed" text-anchor="start">soft labels, T = 4</text>
+<text x="56" y="970" font-size="11" font-weight="400" fill="#475569" text-anchor="start">Blocks: 3x3x3 conv + batch norm + ReLU; fully connected layers with 20 % dropout. Alternative: --disc_model cnn (small 3D CNN, image + FRST + probability).</text>
 </svg>

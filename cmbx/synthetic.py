@@ -77,6 +77,31 @@ def write_phantom_dataset(out_dir: str, n_cases: int = 10, seed: int = 0, **kw) 
     return path
 
 
+def write_phantom_preprocessed(root: str, n_cases: int = 10, seed: int = 0, labels: bool = True, flair: bool = True,
+                               **kw) -> str:
+    """Write ``n_cases`` phantoms as a cohort (README "Data"): ``<root>/derivatives/preprocessed/phantom-XX/`` with
+    ``phantom-XX_t2star``, ``_brainmask``, ``_synthseg``, with labels=True ``_cmb``, with flair=True ``_flair`` (on
+    the scan matrix, other contrast), plus ``<root>/participants.tsv``. Returns the root."""
+    prep = os.path.join(root, "derivatives", "preprocessed")
+    ids = []
+    for i in range(n_cases):
+        sid = f"phantom-{i:02d}"
+        ph = phantom(seed=seed + i, n_spots=(i % 4), **kw)
+        d = os.path.join(prep, sid)
+        os.makedirs(d, exist_ok=True)
+        for k, suffix in (("image", "t2star"), ("brain", "brainmask"), ("tissue", "synthseg")) + ((("label", "cmb"),) if labels else ()):
+            nib.save(ph[k], os.path.join(d, f"{sid}_{suffix}.nii.gz"))
+        if flair:
+            im = ph["image"]
+            b = np.asarray(ph["brain"].dataobj) > 0
+            a = np.asarray(im.dataobj, np.float32)
+            nib.save(nib.Nifti1Image(((a.max() - a) * b).astype(np.float32), im.affine), os.path.join(d, f"{sid}_flair.nii.gz"))
+        ids.append(sid)
+    with open(os.path.join(root, "participants.tsv"), "w") as f:
+        f.write("participant_id\n" + "".join(f"{s}\n" for s in ids))
+    return root
+
+
 def write_phantom_bids(root: str, n_cases: int = 10, seed: int = 0, labels: bool = True, **kw) -> str:
     """Write ``n_cases`` phantoms in the recommended BIDS layout (README "Data") under ``root``:
 

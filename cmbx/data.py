@@ -187,6 +187,8 @@ def prepared_lesion_counts(prepared_dir: str, ids) -> Dict[str, int]:
 def write_caselist(rows: List[Dict], path: str) -> None:
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     keys = ["id", "image", "label", "brain_mask", "tissue_map", "inpaint_mask", "group", "fold"]
+    keys += [k for k in dict.fromkeys(k for r in rows for k in r) if k not in keys and k not in ("n_lesions", "lesion_class")
+             and any(isinstance(r.get(k), str) and r[k].endswith((".nii", ".nii.gz")) for r in rows)]   # e.g. flair
     with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
         w.writeheader()
