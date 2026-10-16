@@ -68,3 +68,15 @@ def test_clump_guard_and_choose_cell_fallback():
     rows = [grid_rows(p, lab, THR, SIZES, 2100)]
     t, m, s, clumps = choose_cell(rows, THR, SIZES, (0.5, 1))
     assert (t, m) == (0.5, 1) and s["f1"] == 0 and clumps == 1
+
+
+def test_choose_cell_without_reference_lesions_takes_fewest_false_positives():
+    """An inner fold with no reference lesion (tiny data): F1 is 0 everywhere, so the cell with the fewest false
+    positives is chosen instead of the permissive fallback (0.5, 1)."""
+    rng = np.random.default_rng(0)
+    p = (rng.random((20, 20, 20)) * 0.85).astype(np.float32)                   # noise, all below 0.85
+    p[5:7, 5:7, 5:7] = 0.95                                                     # one confident blob (8 voxels)
+    lab = np.zeros(p.shape, np.uint8)                                           # no references at all
+    rows = [grid_rows(p, lab, THR, SIZES, 2100)]
+    t, m, s, _ = choose_cell(rows, THR, SIZES, (0.5, 1))
+    assert s["n_ref"] == 0 and s["fp"] == min(r[0]["fp"] for r in rows[0].values()) and (t, m) != (0.5, 1)

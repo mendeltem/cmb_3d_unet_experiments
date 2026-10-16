@@ -117,13 +117,20 @@ def grid_rows(p: np.ndarray, lab: np.ndarray, thresholds: Sequence[float], min_s
 def choose_cell(all_rows: List[Dict[Cell, Tuple[Dict, int]]], thresholds: Sequence[float],
                 min_sizes: Sequence[int], fallback: Sequence = (0.5, 1)):
     """Best pooled F1 over the cases (first cell wins ties, thresholds outer, sizes inner, as ``cv5.waehle``).
-    Returns ``(threshold, min_size, summary, clumps)``; if every cell scores F1 = 0, the fallback cell."""
+    Returns ``(threshold, min_size, summary, clumps)``; if every cell scores F1 = 0, the fallback cell -- except when
+    the cases hold NO reference lesion at all (F1 is then 0 everywhere by definition): the cell with the fewest false
+    positives is taken (ties: higher threshold, then larger size). Only possible with tiny/unbalanced inner folds;
+    with references in the inner fold the original rule applies unchanged."""
     best = None
     for t in thresholds:
         for m in min_sizes:
             s = summarize([z[(t, m)][0] for z in all_rows])
             if best is None or s["f1"] > best[2]["f1"] + 1e-12:
                 best = (t, m, s, sum(z[(t, m)][1] for z in all_rows))
+    if best[2]["f1"] <= 0 and best[2]["n_ref"] == 0:
+        cells = [(t, m) for t in thresholds for m in min_sizes]
+        t, m = min(cells, key=lambda c: (summarize([z[c][0] for z in all_rows])["fp"], -c[0], -c[1]))
+        return (t, m, summarize([z[(t, m)][0] for z in all_rows]), sum(z[(t, m)][1] for z in all_rows))
     if best[2]["f1"] <= 0:
         t, m = fallback[0], int(fallback[1])
         key = (t, m)

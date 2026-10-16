@@ -38,12 +38,13 @@ def cv_cell(run_dir: str):
     return (float(t), int(m)), len(metas)
 
 
-def train_final(cfg: Dict, run_dir: str, log=print) -> Dict:
+def train_final(cfg: Dict, run_dir: str, log=print, overwrite: bool = False) -> Dict:
     T, S = cfg["train"], cfg["selection"]
     out = os.path.join(run_dir, "final")
     os.makedirs(out, exist_ok=True)
-    if os.path.exists(os.path.join(out, "meta.json")) and json.load(open(os.path.join(out, "meta.json"))).get("ok"):
-        log(f"final model exists: {out}/model.pt")
+    if not overwrite and os.path.exists(os.path.join(out, "meta.json")) and \
+            json.load(open(os.path.join(out, "meta.json"))).get("ok"):
+        log(f"final model exists: {out}/model.pt (train it again with `cmbx train-final <config> --overwrite`)")
         return json.load(open(os.path.join(out, "meta.json")))
     ids = [c["id"] for c in read_cases(cfg["data"]["cases"])]
     recs = {s: load_prepared(cfg["data"]["prepared_dir"], s, T["channels"]) for s in ids}

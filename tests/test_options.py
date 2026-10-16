@@ -117,3 +117,16 @@ def test_old_preprocess_signature_is_reused():
     assert same_preprocessing(old, new)
     assert not same_preprocessing({**old, "spacing": [1.0, 1.0, 1.0]}, new)
     assert not same_preprocessing(old, {**new, "extra_channels": {"v": "v_path"}})
+
+
+def test_train_final_overwrite(trained):
+    from cmbx.final import train_final
+    import yaml
+    tmp, run, cases = trained
+    cfg = yaml.safe_load(open(os.path.join(run, "config.yaml")))
+    before = os.path.getmtime(os.path.join(run, "final", "model.pt"))
+    msgs = []
+    train_final(cfg, run, msgs.append)                                    # exists: skipped, with a hint
+    assert any("--overwrite" in m for m in msgs) and os.path.getmtime(os.path.join(run, "final", "model.pt")) == before
+    train_final(cfg, run, lambda *a: None, overwrite=True)
+    assert os.path.getmtime(os.path.join(run, "final", "model.pt")) > before

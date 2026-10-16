@@ -75,3 +75,37 @@ def write_phantom_dataset(out_dir: str, n_cases: int = 10, seed: int = 0, **kw) 
         w.writeheader()
         w.writerows(rows)
     return path
+
+
+def write_phantom_bids(root: str, n_cases: int = 10, seed: int = 0, labels: bool = True, **kw) -> str:
+    """Write ``n_cases`` phantoms in the recommended BIDS layout (README "Data") under ``root``:
+
+        participants.tsv, dataset_description.json
+        sub-XXX/anat/sub-XXX_T2starw.nii.gz                                        raw image
+        derivatives/biascorr/sub-XXX/anat/sub-XXX_T2starw_desc-biascorr_T2starw.nii.gz   bias-corrected (= the input)
+        derivatives/brainmask/sub-XXX/anat/sub-XXX_T2starw_desc-brain_mask.nii.gz
+        derivatives/manual-cmb/sub-XXX/anat/sub-XXX_T2starw_desc-cmb_mask.nii.gz    reference (only with labels=True)
+        derivatives/synthseg/sub-XXX/anat/sub-XXX_T2starw_dseg.nii.gz               optional tissue map
+    ``labels=False`` gives a dataset as it arrives for inference (no reference masks). Returns ``root``."""
+    import json
+    os.makedirs(root, exist_ok=True)
+    ids = []
+    for i in range(n_cases):
+        sid = f"sub-{i + 1:03d}"
+        ph = phantom(seed=seed + i, n_spots=(i % 4), **kw)
+        files = {f"{sid}/anat/{sid}_T2starw.nii.gz": ph["image"],
+                 f"derivatives/biascorr/{sid}/anat/{sid}_T2starw_desc-biascorr_T2starw.nii.gz": ph["image"],
+                 f"derivatives/brainmask/{sid}/anat/{sid}_T2starw_desc-brain_mask.nii.gz": ph["brain"],
+                 f"derivatives/synthseg/{sid}/anat/{sid}_T2starw_dseg.nii.gz": ph["tissue"]}
+        if labels:
+            files[f"derivatives/manual-cmb/{sid}/anat/{sid}_T2starw_desc-cmb_mask.nii.gz"] = ph["label"]
+        for rel, img in files.items():
+            os.makedirs(os.path.dirname(os.path.join(root, rel)), exist_ok=True)
+            nib.save(img, os.path.join(root, rel))
+        ids.append(sid)
+    with open(os.path.join(root, "participants.tsv"), "w", newline="") as f:
+        f.write("participant_id\n" + "".join(f"{s}\n" for s in ids))
+    json.dump({"Name": "cmbx synthetic phantoms (no patient data)", "BIDSVersion": "1.9.0", "DatasetType": "raw"},
+              open(os.path.join(root, "dataset_description.json"), "w"), indent=1)
+    return root
+

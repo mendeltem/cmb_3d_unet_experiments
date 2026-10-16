@@ -20,6 +20,11 @@ Folds: lesion classes 0 / 1-2 / 3-5 / >5 (26-connected components of the referen
 ``numpy.random.default_rng(seed)`` shuffle, then round-robin over the folds with the counter running on across
 classes (deterministic for the same ids in the same order). ``--no-folds`` leaves them to ``cmbx split``.
 Reports next to the case list: ``missing.tsv``, ``quality.tsv``, ``caselist.tsv``, ``caselist_report.json``.
+
+``--bids ROOT`` fills every pattern not given from the recommended BIDS layout (``BIDS`` below, README "Data"):
+bias-corrected image in ``derivatives/biascorr``, reference in ``derivatives/manual-cmb`` (``*_desc-cmb_mask``), brain
+mask in ``derivatives/brainmask`` (``*_desc-brain_mask``), optional SynthSeg in ``derivatives/synthseg`` (``*_dseg``),
+raw image ``sub-X/anat/*_T2starw``, ids from ``participants.tsv``. Exclusions stay explicit (``--exclude``).
 """
 from __future__ import annotations
 
@@ -115,6 +120,27 @@ def ids_from_pattern(pattern: str) -> List[str]:
         if m:
             out.add(m.group("id"))
     return sorted(out)
+
+
+BIDS = dict(                    # the recommended BIDS layout (README "Data"); {root} = dataset root
+    image="{root}/derivatives/biascorr/{id}/anat/{id}*_desc-biascorr_*.nii*",
+    label="{root}/derivatives/manual-cmb/{id}/anat/{id}*_desc-cmb_mask.nii*",
+    brain_mask="{root}/derivatives/brainmask/{id}/anat/{id}*_desc-brain_mask.nii*",
+    tissue_map="{root}/derivatives/synthseg/{id}/anat/{id}*_dseg.nii*",
+    raw="{root}/{id}/anat/{id}*_T2starw.nii*",
+    ids="{root}/participants.tsv")
+
+
+def bids_patterns(root: str) -> Dict[str, str]:
+    """Patterns of the recommended BIDS layout under ``root``; tissue maps / ids only if their folder / file exists."""
+    root = os.path.abspath(root)
+    out = {k: v.replace("{root}", root) for k, v in BIDS.items()}
+    for key, folder in (("tissue_map", "synthseg"), ("label", "manual-cmb"), ("brain_mask", "brainmask")):
+        if not os.path.isdir(os.path.join(root, "derivatives", folder)):      # e.g. no references: inference data
+            out.pop(key)
+    if not os.path.exists(out["ids"]):
+        out.pop("ids")
+    return out
 
 
 def build_caselist(image: str, label: Optional[str] = None, brain_mask: Optional[List[str]] = None,

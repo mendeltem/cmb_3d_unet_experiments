@@ -1,0 +1,14 @@
+# The README quick start on the synthetic BIDS example (examples/bids_train): small network, short training, runs on
+# a CPU in a few minutes. It shows the workflow; the numbers say nothing about real data (use baseline.yaml there).
+name: example
+model:
+  base_channels: 8
+train:
+  epochs: 8
+  min_epochs: 8
+  eval_every: 2
+  n_patches: 64
+  batch_size: 4
+  patch_size: [16, 32, 32]
+preprocess:
+  workers: 2

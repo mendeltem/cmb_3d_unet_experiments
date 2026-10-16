@@ -62,6 +62,9 @@ first. No FSL, HD-BET or FreeSurfer is needed.
 ## Your data
 
 ### Case list from your folder layout (`cmbx make-caselist`)
+For the recommended BIDS layout (README "Data") one option is enough: `cmbx make-caselist --bids <root> --out ...`
+(patterns of `cmbx.caselist.BIDS`; derivative folders that do not exist, e.g. `manual-cmb` for new scans, are
+skipped). Any other layout:
 Nothing about a dataset is built in: the layout is given as path patterns with `{id}` (glob `*` allowed; the first
 match is used), the ids and exclusions as files you pass.
 ```bash
@@ -283,6 +286,9 @@ The VALDO numbers come from a different dataset (public, 3 sites) and are not a 
 * The CSF rule in the CV (`csf_rule: true`) acts on the inner selection and the test fold; in cmb-valdo-chain it was
   applied afterwards to the stored maps with a cross-fold cell choice -- that variant is `cmbx evaluate --mode
   crossfold --csf-rule`.
+* Threshold choice when the inner fold holds no reference lesion at all (possible only with tiny or unbalanced
+  data): F1 is 0 for every cell, so the cell with the fewest false positives is taken instead of the fallback
+  (0.5, 1). With reference lesions in the inner fold the original rule applies unchanged.
 * Not ported: the second-stage candidate classifier, ensembles over seeds, synthesis/augmentation variants and the
   other tournament networks.
 

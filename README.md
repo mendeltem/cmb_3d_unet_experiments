@@ -29,28 +29,63 @@ driver. Behind a proxy export `http_proxy` / `https_proxy` first; `./install.sh 
 backward) and a 5-fold CV + final model on synthetic phantoms. A missing GPU is reported, not a failure; real
 training needs a GPU with >= 2 GB memory (one training: ~1.8 GiB) and >= 32 GB RAM. Full test suite: `pytest -q`.
 
-## Data
+## Data (BIDS layout)
 
 Brain extraction and bias-field correction are **not** part of this repository: they are done once, uniformly, on
-the data. Per case `cmbx` needs a bias-corrected T2*/SWI image, a brain mask and the reference CMB mask (same matrix).
-The case list is a CSV (`id`, `image`, `label`, `brain_mask`; optional `tissue_map`, `fold`, own columns). Build it
-from any folder layout with path patterns (`{id}` = case id, `*` allowed):
+the data. Put each dataset into this BIDS layout (synthetic examples in the repository: `examples/bids_train`,
+`examples/bids_new`; `cmbx make-phantoms <dir> --bids` writes another):
+
+```
+my_dataset/                                      for TRAINING (examples/bids_train)
+├── participants.tsv                             participant_id column = the case ids
+├── dataset_description.json
+├── sub-001/anat/sub-001_T2starw.nii.gz          raw scan (SWI: sub-001_acq-swi_T2starw.nii.gz)
+└── derivatives/
+    ├── biascorr/sub-001/anat/sub-001_T2starw_desc-biascorr_T2starw.nii.gz   bias-corrected scan  (required)
+    ├── brainmask/sub-001/anat/sub-001_T2starw_desc-brain_mask.nii.gz        brain mask           (recommended)
+    ├── manual-cmb/sub-001/anat/sub-001_T2starw_desc-cmb_mask.nii.gz         reference CMB mask   (training only)
+    └── synthseg/sub-001/anat/sub-001_T2starw_dseg.nii.gz                    SynthSeg labels      (optional, CSF rule)
+
+new_scans/                                       for INFERENCE (examples/bids_new): the same without manual-cmb/
+```
+
+| | training (`run-experiment`) | inference (`predict`) |
+|---|---|---|
+| `derivatives/biascorr` | required | required |
+| `derivatives/brainmask` | recommended (else `image > 0`) | recommended (else `image > 0`) |
+| `derivatives/manual-cmb` | required | not needed |
+| `derivatives/synthseg` | only for the CSF rule | only for `--csf-rule` |
+
+All masks on the matrix of their scan. One line makes the case list (ids from `participants.tsv`; folders that are
+missing are skipped; leave cases out with `--exclude ids.txt`):
 
 ```bash
-cmbx make-caselist --image "/data/{id}/anat/{id}_desc-biascorr_T2starw.nii.gz" \
-    --label "/data/{id}/anat/{id}_cmb_mask.nii.gz" --brain-mask "/data/{id}/anat/{id}_brainmask.nii.gz" \
-    [--ids ids.tsv] [--exclude leave_out.txt] --out ../my_runs/cases.csv
+cmbx make-caselist --bids examples/bids_train --out ../my_runs/cases.csv               # training
+cmbx make-caselist --bids examples/bids_new --no-folds --out ../my_runs/new/cases.csv  # inference
 ```
-It reports cases with missing inputs and suspicious reference masks, and assigns stratified folds (details: DETAILS).
+Other layouts: path patterns instead of `--bids`, e.g. `--image "/data/{id}/{id}_t2s_corrected.nii.gz" --label ...
+--brain-mask ...` (any `{id}` pattern with `*`; docs/DETAILS.md). The tool also reports missing inputs and suspicious
+reference masks.
 
 ## Run
 
+The whole workflow on the synthetic BIDS example (about 20 s on a GPU, 2.5 min on a CPU; the cross-validation
+finds the 13 phantom microbleeds; the numbers say nothing about real data):
 ```bash
-cp configs/baseline.yaml ../my_runs/my_baseline.yaml   # set name, data.cases / prepared_dir / splits, output_root
+cmbx make-caselist --bids examples/bids_train --out ../my_runs/cases.csv
+cmbx run-experiment configs/example.yaml --set output_root=../my_runs/runs \
+    data.cases=../my_runs/cases.csv data.prepared_dir=../my_runs/prepared data.splits=../my_runs/splits.json
+cmbx make-caselist --bids examples/bids_new --no-folds --out ../my_runs/new/cases.csv
+cmbx predict --run ../my_runs/runs/example --cases ../my_runs/new/cases.csv --out ../my_runs/pred
+```
+Your data, real training:
+```bash
+cp configs/baseline.yaml ../my_runs/my_baseline.yaml   # set name, output_root and the data paths:
+#   data: {cases: ../my_runs/cases.csv, prepared_dir: ../my_runs/prepared, splits: ../my_runs/splits.json}
 cmbx run-experiment ../my_runs/my_baseline.yaml       # prepare -> split -> 5-fold CV -> evaluation -> final model
 cmbx compare ../my_runs/runs                          # all runs side by side -> summary.csv
 cmbx predict --run <run folder> --image scan.nii.gz --out pred/     # apply the final model to a new scan
-cmbx predict --run <run folder> --cases new.csv --out pred/          # ... or to a case list
+cmbx predict --run <run folder> --cases ../my_runs/new/cases.csv --out pred/   # ... or to a case list
 ```
 Per run: `summary.json` = the CV score (pooled lesion-level F1, precision, sensitivity, FP per case, per-case F1) and
 **`final/model.pt` = one model trained on all cases**, the model to keep and use (`--no-final` skips it;
@@ -69,6 +104,7 @@ you want to vary, then `cmbx run-experiment your.yaml`.
 | config | tests |
 |---|---|
 | `baseline.yaml` | the winning recipe; copy it for your data (set the `data` paths and `output_root`) |
+| `example.yaml` | small and fast, for the synthetic BIDS example (quick start) |
 | `no_frst.yaml` | without the FRST channel (`train.channels: [image]`) |
 | `extra_channel_example.yaml` | an **own extra input channel** (e.g. vesselness, FLAIR): `preprocess.extra_channels: {name: column}`, then `train.channels: [image, frst, name]` or `[image, name]` |
 | `csf_rule.yaml` | drop candidates in CSF (needs a SynthSeg map per case) |

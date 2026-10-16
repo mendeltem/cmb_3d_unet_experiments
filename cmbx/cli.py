@@ -31,14 +31,28 @@ def _cfg(args):
 
 
 def cmd_make_phantoms(a):
-    from .synthetic import write_phantom_dataset
-    p = write_phantom_dataset(a.out, a.n, a.seed)
-    _log(f"{a.n} phantom cases, case list {p}")
+    from .synthetic import write_phantom_bids, write_phantom_dataset
+    if a.bids:
+        write_phantom_bids(a.out, a.n, a.seed, labels=not a.no_labels)
+        _log(f"{a.n} phantom cases in the BIDS layout -> {a.out} ({'no reference masks' if a.no_labels else 'with reference masks'})")
+    else:
+        p = write_phantom_dataset(a.out, a.n, a.seed)
+        _log(f"{a.n} phantom cases, case list {p}")
 
 
 def cmd_make_caselist(a):
-    from .caselist import build_caselist
+    from .caselist import bids_patterns, build_caselist
     from .data import write_caselist
+    if a.bids:                                   # recommended BIDS layout; explicit patterns win
+        b = bids_patterns(a.bids)
+        a.image = a.image or b["image"]
+        a.label = a.label or b.get("label")
+        a.brain_mask = a.brain_mask or ([b["brain_mask"]] if "brain_mask" in b else [])
+        a.tissue_map = a.tissue_map or b.get("tissue_map")
+        a.raw = a.raw or b["raw"]
+        a.ids = a.ids or b.get("ids")
+    if not a.image:
+        raise SystemExit("give --bids <dataset root> or at least --image <pattern with {id}>")
     rows = build_caselist(a.image, a.label, a.brain_mask, a.tissue_map, a.raw, a.ids, a.exclude, a.n_folds, a.fold_seed,
                           not a.no_folds, not a.no_quality_checks, os.path.dirname(os.path.abspath(a.out)), _log)
     if a.no_folds:
@@ -89,7 +103,7 @@ def cmd_train_final(a):
     cfg = load_config(a.config_file, parse_set(a.set))
     check_config(cfg)
     ensure_prepared(cfg, None, log=_log)
-    train_final(cfg, os.path.join(cfg["output_root"], cfg["name"]), _log)
+    train_final(cfg, os.path.join(cfg["output_root"], cfg["name"]), _log, overwrite=a.overwrite)
 
 
 def cmd_evaluate(a):
@@ -123,11 +137,14 @@ def main(argv=None):
     p.add_argument("out")
     p.add_argument("--n", type=int, default=10)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--bids", action="store_true", help="write the recommended BIDS layout instead of a flat folder")
+    p.add_argument("--no-labels", action="store_true", help="with --bids: no reference masks (a dataset for inference)")
     p.set_defaults(fn=cmd_make_phantoms)
 
     p = sub.add_parser("make-caselist", help="case list from any folder layout, given as path patterns with {id}",
                        description="Each pattern is a path with {id} and optional * wildcards; the first match is used.")
-    p.add_argument("--image", required=True, help="bias-corrected image pattern, e.g. /data/{id}/anat/{id}*_T2starw.nii.gz")
+    p.add_argument("--bids", default=None, help="dataset root in the recommended BIDS layout (README): fills all patterns")
+    p.add_argument("--image", default=None, help="bias-corrected image pattern, e.g. /data/{id}/anat/{id}*_T2starw.nii.gz")
     p.add_argument("--label", default=None, help="reference CMB mask pattern (needed for training, not for predict)")
     p.add_argument("--brain-mask", action="append", default=[], help="brain mask pattern; repeat for fallbacks (first match wins)")
     p.add_argument("--tissue-map", default=None, help="SynthSeg map pattern (for the CSF rule)")
@@ -178,6 +195,7 @@ def main(argv=None):
     p = sub.add_parser("train-final", help="train ONE model on all cases -> <run>/final/model.pt")
     p.add_argument("config_file")
     p.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE")
+    p.add_argument("--overwrite", action="store_true", help="train again even if final/model.pt exists")
     p.set_defaults(fn=cmd_train_final)
 
     p = sub.add_parser("evaluate", help="(re-)score a finished run")
