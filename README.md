@@ -115,7 +115,9 @@ Post-processing variants without retraining: `cmbx evaluate <run> --mode crossfo
 
 ## HPC (SLURM)
 
-Install once on the login node (`./install.sh`), then check a GPU node (~1 min, synthetic phantoms, no data):
+Install once on the login node, inside `tmux` (a dropped SSH session then does not stop it): `./install.sh`, or
+`./install.sh --venv` (Python of the active conda base + pip, no conda download; if `conda create` fails the script
+falls back to this by itself). Then check a GPU node (~1 min, synthetic phantoms, no data):
 ```bash
 mkdir -p logs && sbatch scripts/slurm_quick_test.sbatch && squeue --me      # result in logs/cmbx_quick_<job>.out
 ```

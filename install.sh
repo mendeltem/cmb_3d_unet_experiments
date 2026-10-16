@@ -60,7 +60,12 @@ if [ -n "$CONDA" ]; then
         env -u CONDA_PREFIX -u CONDA_DEFAULT_ENV -u CONDA_SHLVL "$CONDA" env remove -y "${LOC[@]}"
     fi
     if "$CONDA" run "${LOC[@]}" python -V >/dev/null 2>&1; then say "env exists, reusing it (--recreate builds it new)"
-    else "$CONDA" create -y "${LOC[@]}" --override-channels -c conda-forge "python=$PY_VERSION" pip; fi
+    elif ! "$CONDA" create -y "${LOC[@]}" --override-channels -c conda-forge "python=$PY_VERSION" pip; then
+        say "conda create failed (network? see above): falling back to a venv in .venv"
+        CONDA=""; KIND="venv"
+    fi
+  fi
+  if [ -n "$CONDA" ]; then
     ENVP=$("$CONDA" run "${LOC[@]}" python -c 'import sys; print(sys.prefix)')
     BASE=$("$CONDA" info --base)
     printf '# written by install.sh: activate the cmbx environment (source env.sh)\nsource "%s/etc/profile.d/conda.sh" && conda activate "%s"\n' "$BASE" "$ENVP" > env.sh
