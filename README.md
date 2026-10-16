@@ -29,6 +29,20 @@ driver. Behind a proxy export `http_proxy` / `https_proxy` first; `./install.sh 
 backward) and a 5-fold CV + final model on synthetic phantoms. A missing GPU is reported, not a failure; real
 training needs a GPU with >= 2 GB memory (one training: ~1.8 GiB) and >= 32 GB RAM. Full test suite: `pytest -q`.
 
+## Pretrained model: inference right away, or fine-tuning
+
+`./install.sh` also downloads `models/valdo_t2` (or `cmbx get-model valdo_t2`): this U-Net trained on all 72 cases of
+the public VALDO 2021 challenge (T2*-GRE), as a run folder that `predict` and `init_from` understand.
+```bash
+cmbx predict --run models/valdo_t2 --image scan.nii.gz --brain-mask mask.nii.gz --out pred/    # bias-corrected T2*
+cmbx run-experiment ../my_runs/my_baseline.yaml --set train.init_from=models/valdo_t2          # fine-tune on your data
+cmbx run-experiment ../my_runs/my_baseline.yaml --set train.init_from=models/valdo_t2 \
+    "train.channels=[image,frst,myvessel]"     # other channels: matched by name, a new one starts at zero weight
+```
+Without adaptation it is a starting point, not the final word: on an unseen in-house T2* cohort (75 cases) it reached
+a pooled lesion F1 of 0.47 at its default cell, against 0.67 for a model trained there; it is clearly worse on SWI.
+Licence of the weights: CC BY-NC-SA 4.0 (non-commercial; cite the VALDO paper), see `models/valdo_t2/MODEL_CARD.md`.
+
 ## Data (BIDS layout)
 
 Brain extraction and bias-field correction are **not** part of this repository: they are done once, uniformly, on
@@ -131,4 +145,4 @@ Use the partition / GRES names of your cluster (`sinfo -o "%P %G"`); without sha
 ## License
 
 Code MIT. Data and weights are not part of the repository. Cite cmb-valdo-chain (mendeltem, 2026) and, for the
-FRST, Loy & Zelinsky 2003 (doi:10.1109/TPAMI.2003.1217601); VALDO: Sudre et al. 2024 (doi:10.1016/j.media.2024.103112).
+FRST, Loy & Zelinsky 2003 (doi:10.1109/TPAMI.2003.1217601); VALDO: Sudre et al. 2024 (doi:10.1016/j.media.2023.103029).

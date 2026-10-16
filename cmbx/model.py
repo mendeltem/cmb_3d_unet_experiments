@@ -13,6 +13,7 @@ key rename (``convert_legacy_keys``).
 """
 from __future__ import annotations
 
+import os
 import re
 from typing import Dict, Sequence
 
@@ -115,14 +116,83 @@ def convert_legacy_keys(state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tenso
     return out
 
 
-def load_state(model: nn.Module, path: str) -> nn.Module:
-    """Load a checkpoint written by this package or a research ``modell.pt`` of cmb-valdo-chain."""
+def read_state(path: str) -> Dict[str, torch.Tensor]:
+    """State dict of a checkpoint of this package, a research ``modell.pt`` of cmb-valdo-chain or a released weight
+    file (mb_segment layout), in this package's key names."""
     payload = torch.load(path, map_location="cpu", weights_only=False)
     state = payload["state_dict"] if isinstance(payload, dict) and "state_dict" in payload else payload
     if any(k.startswith("netz.") for k in state):
         state = convert_legacy_keys(state)
-    model.load_state_dict(state, strict=True)
+    if any(re.match(r"^net\.(enc\d|dec\d|bottleneck)\.\d", k) for k in state):    # released weights (mb_segment layout)
+        state = {re.sub(r"^net\.(enc\d|dec\d|bottleneck)\.(\d)", r"net.\1.net.\2", k): v for k, v in state.items()}
+    return state
+
+
+def load_state(model: nn.Module, path: str) -> nn.Module:
+    """Load a checkpoint (any of the formats of ``read_state``) into ``model``, strictly."""
+    model.load_state_dict(read_state(path), strict=True)
     return model
+
+
+def resolve_pretrained(source: str, channels_hint: Sequence[str] = None):
+    """``source`` = a run folder (final/model.pt, else fold0/model.pt; channels from its config.yaml) or a model file
+    (channels from the config.yaml of its run folder if there is one, else ``channels_hint``, else [image, frst])."""
+    import os
+    import yaml
+    run = source if os.path.isdir(source) else os.path.dirname(os.path.dirname(os.path.abspath(source)))
+    path = source
+    if os.path.isdir(source):
+        path = next((p for p in (os.path.join(source, "final", "model.pt"), os.path.join(source, "fold0", "model.pt"))
+                     if os.path.exists(p)), None)
+        if path is None:
+            raise FileNotFoundError(f"no final/model.pt or fold0/model.pt in {source}")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"pretrained model not found: {path}")
+    cfg_path = os.path.join(run, "config.yaml")
+    if channels_hint:
+        channels = list(channels_hint)
+    elif os.path.exists(cfg_path):
+        channels = list(yaml.safe_load(open(cfg_path))["train"]["channels"])
+    else:
+        channels = ["image", "frst"]
+    return path, channels
+
+
+def init_from_pretrained(model: nn.Module, source: str, channels: Sequence[str], source_channels: Sequence[str] = None,
+                         log=print) -> Dict:
+    """Start of a fine-tuning: every weight from the pretrained model. Input channels are matched BY NAME: a channel
+    the pretrained model had keeps its first-layer weights, a NEW channel starts at zero weight (so the network first
+    computes exactly what the pretrained one did and learns the new channel during training), a channel left out is
+    dropped. The width (``model.base_channels``) must be the same."""
+    path, src = resolve_pretrained(source, source_channels)
+    state, own = read_state(path), model.state_dict()
+    missing = [k for k in own if k not in state]
+    if missing:
+        raise ValueError(f"{path} does not fit this network (missing {missing[:3]} ...)")
+    out = {}
+    input_key = next(k for k, w in own.items() if w.ndim == 5)          # the first convolution sees the channels
+    for k, w in own.items():
+        v = state[k]
+        if k == input_key:
+            if not (v.ndim == 5 and v.shape[0] == w.shape[0] and v.shape[2:] == w.shape[2:] and v.shape[1] == len(src)):
+                raise ValueError(f"{path}: input layer {k} has shape {tuple(v.shape)} for channels {list(src)}, this "
+                                 f"network {tuple(w.shape)} (same model.base_channels as the pretrained model needed)")
+            new = torch.zeros_like(w)
+            for i, ch in enumerate(channels):                        # by name: same, reordered, new (zero) or dropped
+                if ch in src:
+                    new[:, i] = v[:, src.index(ch)]
+            out[k] = new
+        elif v.shape == w.shape:
+            out[k] = v
+        else:
+            raise ValueError(f"{path}: {k} has shape {tuple(v.shape)}, this network {tuple(w.shape)} "
+                             "(same model.base_channels as the pretrained model needed)")
+    model.load_state_dict(out, strict=True)
+    info = dict(init_from=os.path.abspath(path), init_channels=list(src), channels=list(channels),
+                new_channels=[c for c in channels if c not in src], dropped_channels=[c for c in src if c not in channels])
+    log(f"initialised from {path}: channels {list(channels)} <- {list(src)}"
+        + (f" (new, zero-initialised: {info['new_channels']})" if info["new_channels"] else ""))
+    return info
 
 
 def count_parameters(model: nn.Module) -> int:

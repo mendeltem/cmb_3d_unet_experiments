@@ -85,6 +85,8 @@ def check_config(cfg: Dict) -> None:
     for k in ("epochs", "n_patches", "batch_size", "eval_every"):
         if int(T[k]) < 1:
             raise SystemExit(f"train.{k} must be >= 1; got {T[k]}")
+    if T.get("init_from") and not os.path.exists(T["init_from"]):
+        raise SystemExit(f"train.init_from not found: {T['init_from']} (a run folder such as models/valdo_t2, or a model.pt)")
     if int(T["min_epochs"]) > int(T["epochs"]):
         raise SystemExit(f"train.min_epochs ({T['min_epochs']}) > train.epochs ({T['epochs']})")
     if int(cfg["data"]["n_folds"]) < 3:

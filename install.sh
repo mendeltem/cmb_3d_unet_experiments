@@ -11,16 +11,19 @@
 # Options: --name NAME (conda env, default cmbx) | --prefix PATH (conda env at a path) | --venv (force a venv)
 #          --torch auto|cu124|cu118|rocm|cpu|pypi | --no-test | --dry-run (print the plan only)
 #          --recreate (delete the environment first, also when it is the active one, and build it new)
+#          --no-model (skip the pretrained VALDO model; later: cmbx get-model valdo_t2)
+# 4. downloads the pretrained VALDO model to models/valdo_t2 (public data, CC BY-NC-SA 4.0): predict right away
 # Behind a proxy: export http_proxy / https_proxy first.
 set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"; REPO=$(pwd)
 export PYTHONNOUSERSITE=1      # packages in ~/.local must not leak into (or satisfy requirements of) the environment
-NAME=cmbx; PREFIX=""; FORCE_VENV=0; TORCH=auto; TEST=1; DRY=0; RECREATE=0
+NAME=cmbx; PREFIX=""; FORCE_VENV=0; TORCH=auto; TEST=1; DRY=0; RECREATE=0; MODEL=1
 TORCH_VERSION=2.6.0; PY_VERSION=3.12
 while [ $# -gt 0 ]; do case "$1" in
     --name) NAME=$2; shift 2 ;; --prefix) PREFIX=$2; shift 2 ;; --venv) FORCE_VENV=1; shift ;;
     --torch|--cuda) TORCH=$2; shift 2 ;; --no-test) TEST=0; shift ;; --dry-run) DRY=1; shift ;;
     --recreate) RECREATE=1; shift ;;
+    --no-model) MODEL=0; shift ;;
     -h|--help) sed -n 2,14p "$0"; exit 0 ;; *) echo "unknown option $1 (see --help)"; exit 2 ;; esac; done
 say() { echo "[install] $*"; }
 
@@ -96,5 +99,8 @@ PY=$ENVP/bin/python
 # shellcheck disable=SC2086
 "$PY" -m pip install "torch==$TORCH_VERSION" $TORCH_INDEX
 "$PY" -m pip install -e ".[test]" "numpy>=1.26,<2.3"
+if [ $MODEL = 1 ]; then
+    "$PY" -m cmbx get-model valdo_t2 --dir "$REPO/models" || say "pretrained model not downloaded (offline?): later run  cmbx get-model valdo_t2"
+fi
 say "installed into $ENVP; activate with:  source env.sh"
 if [ $TEST = 1 ]; then "$PY" test.py; fi

@@ -56,7 +56,11 @@ def train_final(cfg: Dict, run_dir: str, log=print, overwrite: bool = False) -> 
     seed = int(T["seed"])
     torch.manual_seed(seed)
     rng = np.random.RandomState(seed)
-    model = build_model(cfg["model"]["name"], len(T["channels"]), int(cfg["model"]["base_channels"])).to(device)
+    model = build_model(cfg["model"]["name"], len(T["channels"]), int(cfg["model"]["base_channels"]))
+    if T.get("init_from"):                                    # fine-tuning from a pretrained model
+        from .model import init_from_pretrained
+        init_from_pretrained(model, T["init_from"], T["channels"], T.get("init_channels"), log)
+    model = model.to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=float(T["lr"]), weight_decay=float(T["weight_decay"]))
     max_ep = int(T["epochs"])
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max_ep)

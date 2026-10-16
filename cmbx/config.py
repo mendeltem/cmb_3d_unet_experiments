@@ -65,6 +65,8 @@ DEFAULTS: Dict[str, Any] = {
         "fold_time_limit_h": 6.0,
         "device": "auto",                        # auto | cuda | cpu
         "use_last_epoch": False,                 # True: test with the last state instead of the inner-fold best
+        "init_from": None,                       # fine-tuning: start from a pretrained run folder / model.pt
+        "init_channels": None,                   # channels of init_from if it is a bare file without config.yaml
     },
     "selection": {                               # chosen on the INNER fold, never on the test fold
         "thresholds": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],

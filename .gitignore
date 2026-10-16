@@ -17,3 +17,4 @@ logs/
 !examples/**/*.nii.gz
 env.sh
 .venv/
+models/

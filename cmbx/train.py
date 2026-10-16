@@ -162,7 +162,12 @@ def train_fold(cfg: Dict, recs: Dict[str, PreparedCase], split: Dict, k: int, ou
     torch.manual_seed(seed)
     rng = np.random.RandomState(seed)
     nch = len(T["channels"])
-    model = build_model(cfg["model"]["name"], nch, int(cfg["model"]["base_channels"])).to(device)
+    model = build_model(cfg["model"]["name"], nch, int(cfg["model"]["base_channels"]))
+    init_info = {}
+    if T.get("init_from"):                                    # fine-tuning from a pretrained model
+        from .model import init_from_pretrained
+        init_info = init_from_pretrained(model, T["init_from"], T["channels"], T.get("init_channels"), log)
+    model = model.to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=float(T["lr"]), weight_decay=float(T["weight_decay"]))
     max_ep = int(T["epochs"])
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max_ep)
@@ -244,7 +249,7 @@ def train_fold(cfg: Dict, recs: Dict[str, PreparedCase], split: Dict, k: int, ou
                              min_size=mind, max_component_voxels=maxvox, epoch=best["epoch"])},
                os.path.join(outdir, "model.pt"))
     s_test = summarize_extended(rows)
-    meta = dict(ok=True, fold=k, inner_fold=(k + 1) % split["n_folds"], seed=seed, device=device,
+    meta = dict(ok=True, fold=k, inner_fold=(k + 1) % split["n_folds"], seed=seed, device=device, **init_info,
                 epochs_run=history[-1]["epoch"], epoch_chosen=best["epoch"], threshold=float(thr),
                 min_size=int(mind), inner_f1=best["f1"], inner_summary=best["summary"],
                 test_f1=s_test["f1"], test_summary=s_test, clumps_test=counter,

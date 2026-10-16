@@ -2,6 +2,7 @@
 
   cmbx make-phantoms data/phantoms --n 10              synthetic cases + case list, to try everything without data
   cmbx make-caselist --image "<dir>/{id}/..." --label ... --out <csv>    case list from any layout (patterns)
+  cmbx get-model valdo_t2                              pretrained VALDO model -> models/valdo_t2 (predict right away)
   cmbx check-env                                       torch/CUDA etc.: what is there, what is missing
   cmbx prepare --config configs/baseline.yaml          native images -> 0.5 x 0.5 x 1 mm grid + FRST (+ tissue map)
   cmbx split --config configs/baseline.yaml            stratified fold assignment -> data/splits.json
@@ -60,6 +61,15 @@ def cmd_make_caselist(a):
             r["fold"] = ""
     write_caselist(rows, a.out)
     _log(f"case list with {len(rows)} cases -> {a.out}")
+
+
+def cmd_get_model(a):
+    from .pretrained import REGISTRY, get_model
+    if a.list or not a.name:
+        for n, m in REGISTRY.items():
+            _log(f"{n}: {m['sequence']}; trained on {m['trained_on']}; licence {m['licence']}")
+        return
+    get_model(a.name, a.dir, _log)
 
 
 def cmd_check_env(a):
@@ -157,6 +167,12 @@ def main(argv=None):
     p.add_argument("--no-quality-checks", action="store_true", help="skip the mask-fit / header-offset report")
     p.add_argument("--no-folds", action="store_true", help="leave folds empty (cmbx split computes them)")
     p.set_defaults(fn=cmd_make_caselist)
+
+    p = sub.add_parser("get-model", help="download a pretrained model (public data only) as a run folder for predict")
+    p.add_argument("name", nargs="?", help="e.g. valdo_t2 (--list shows all)")
+    p.add_argument("--dir", default="models", help="where the run folder goes (default: models/)")
+    p.add_argument("--list", action="store_true")
+    p.set_defaults(fn=cmd_get_model)
 
     p = sub.add_parser("check-env", help="check torch/CUDA and the Python packages")
     p.set_defaults(fn=cmd_check_env)

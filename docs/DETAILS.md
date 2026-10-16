@@ -210,6 +210,7 @@ every output on the input matrix/affine, detections on the reference lesions, eq
 |---|---|
 | `train.loss` | `bce_dice` (default, 0.5 BCE + 0.5 soft Dice), `bce`, `dice`, `focal_dice` (focal BCE gamma 2 + Dice) |
 | `train.channels` | `[image, frst]` (default), `[image]`, plus own channels from `preprocess.extra_channels` |
+| `train.init_from`, `train.init_channels` | fine-tuning: start from a run folder (e.g. `models/valdo_t2`) or a model.pt; input channels matched by name (new = zero weight, so training starts from exactly the pretrained output; dropped ones removed); same `model.base_channels` needed |
 | `train.use_last_epoch` | `false` (inner-fold best state) / `true` (last state) |
 | `train.amp_bf16`, `train.device` | bfloat16 autocast on CUDA; `auto` / `cuda` / `cuda:N` / `cpu` / `mps` |
 | `preprocess.inpaint.method` | `none`, `mean`, `biharmonic`, `package.module:function` |
@@ -294,7 +295,7 @@ The VALDO numbers come from a different dataset (public, 3 sites) and are not a 
 
 ## License and citation
 Code: MIT (`LICENSE`), as cmb-valdo-chain. Data and weights are not part of the repository; VALDO is CC BY-NC-SA 4.0
-(cite Sudre et al. 2024, Medical Image Analysis, doi:10.1016/j.media.2024.103112); in-house data never leave the
+(cite Sudre et al. 2024, Medical Image Analysis, doi:10.1016/j.media.2023.103029); in-house data never leave the
 clinic. If you use this code, cite cmb-valdo-chain (mendeltem, 2026, https://github.com/mendeltem/cmb-valdo-chain) and
 for the FRST Loy & Zelinsky 2003 (IEEE TPAMI 25(8):959-973, doi:10.1109/TPAMI.2003.1217601); the starting point of
 the chain is MicrobleedNet (Sundaresan et al. 2023).
