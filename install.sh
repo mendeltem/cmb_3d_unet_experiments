@@ -10,14 +10,16 @@
 #
 # Options: --name NAME (conda env, default cmbx) | --prefix PATH (conda env at a path) | --venv (force a venv)
 #          --torch auto|cu124|cu118|rocm|cpu|pypi | --no-test | --dry-run (print the plan only)
+#          --recreate (delete the environment first, also when it is the active one, and build it new)
 # Behind a proxy: export http_proxy / https_proxy first.
 set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"; REPO=$(pwd)
-NAME=cmbx; PREFIX=""; FORCE_VENV=0; TORCH=auto; TEST=1; DRY=0
+NAME=cmbx; PREFIX=""; FORCE_VENV=0; TORCH=auto; TEST=1; DRY=0; RECREATE=0
 TORCH_VERSION=2.6.0; PY_VERSION=3.12
 while [ $# -gt 0 ]; do case "$1" in
     --name) NAME=$2; shift 2 ;; --prefix) PREFIX=$2; shift 2 ;; --venv) FORCE_VENV=1; shift ;;
     --torch|--cuda) TORCH=$2; shift 2 ;; --no-test) TEST=0; shift ;; --dry-run) DRY=1; shift ;;
+    --recreate) RECREATE=1; shift ;;
     -h|--help) sed -n 2,14p "$0"; exit 0 ;; *) echo "unknown option $1 (see --help)"; exit 2 ;; esac; done
 say() { echo "[install] $*"; }
 
@@ -53,7 +55,11 @@ say "env:      $KIND -> $TARGET"
 
 if [ -n "$CONDA" ]; then
     if [ -n "$PREFIX" ]; then LOC=(-p "$PREFIX"); else LOC=(-n "$NAME"); fi
-    if "$CONDA" run "${LOC[@]}" python -V >/dev/null 2>&1; then say "env exists, reusing it"
+    if [ $RECREATE = 1 ] && "$CONDA" run "${LOC[@]}" python -V >/dev/null 2>&1; then
+        say "--recreate: removing the existing environment"
+        env -u CONDA_PREFIX -u CONDA_DEFAULT_ENV -u CONDA_SHLVL "$CONDA" env remove -y "${LOC[@]}"
+    fi
+    if "$CONDA" run "${LOC[@]}" python -V >/dev/null 2>&1; then say "env exists, reusing it (--recreate builds it new)"
     else "$CONDA" create -y "${LOC[@]}" --override-channels -c conda-forge "python=$PY_VERSION" pip; fi
     ENVP=$("$CONDA" run "${LOC[@]}" python -c 'import sys; print(sys.prefix)')
     BASE=$("$CONDA" info --base)
@@ -62,6 +68,7 @@ else
     PYS=""; for p in python3.12 python3.11 python3.10 python3; do command -v $p >/dev/null && \
         $p -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null && { PYS=$p; break; }; done
     [ -n "$PYS" ] || { echo "no conda and no Python >= 3.10 found: install Miniforge (https://conda-forge.org/download)"; exit 1; }
+    [ $RECREATE = 1 ] && rm -rf .venv
     if [ ! -x .venv/bin/python ] || ! .venv/bin/python -m pip -V >/dev/null 2>&1; then
         rm -rf .venv
         if command -v uv >/dev/null 2>&1; then uv venv --seed --python "$PYS" .venv          # uv: fast, brings pip

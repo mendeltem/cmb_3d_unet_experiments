@@ -198,9 +198,9 @@ cmbx predict --run <run> --cases new.csv --out pred/                            
 The scans must be bias-corrected like the training data (no label needed); they are prepared with the run's own
 settings. Default model: the final model (`--folds`: mean probability of the 5 fold models); default cell: the one the
 folds chose most often (`--threshold`, `--min-size` to override); `--csf-rule` needs a SynthSeg map; `--device`
-auto | cuda | cpu | mps. Outputs: `<id>_mask.nii.gz` / `<id>_prob.nii.gz` on the **input image grid** (same matrix
+auto | cuda | cpu | mps. Outputs: `<id>_mask.nii.gz` / `<id>_prob.nii.gz` / `<id>_lesions.nii.gz` (label map, value k = microbleed k of the json) on the **input image grid** (same matrix
 and affine; nearest neighbour in world coordinates, a microbleed smaller than one input voxel keeps its centre voxel,
-so the count matches the model grid), copies on the model grid in `grid/`, `<id>.json` with one entry per microbleed
+so the count matches the model grid; on coarse slices two neighbouring microbleeds may touch in the binary mask, the label map keeps them apart), copies on the model grid in `grid/`, `<id>.json` with one entry per microbleed
 (volume mm3, max probability, centre in mm and as input voxel) and `predictions.csv`. Checked on 8 cases of an in-house T2* cohort:
 every output on the input matrix/affine, detections on the reference lesions, equal counts on both grids.
 

@@ -23,7 +23,7 @@ python test.py      # any time: does everything work here? (~1 min)
 NVIDIA (driver >= 525: CUDA 12.4, 450-524: CUDA 11.8), AMD (ROCm), Apple Silicon and ARM (PyPI build), or no GPU
 (the CUDA build, which also runs on the CPU, e.g. on a cluster login node). No CUDA toolkit is needed, only the GPU
 driver. Behind a proxy export `http_proxy` / `https_proxy` first; `./install.sh --help` lists the options
-(`--torch cpu|cu118|...`, `--name`, `--prefix`, `--venv`). Manual alternative: `environment.yml`, see docs/DETAILS.md.
+(`--torch cpu|cu118|...`, `--name`, `--prefix`, `--venv`, `--recreate` = build the environment new). Manual alternative: `environment.yml`, see docs/DETAILS.md.
 
 `test.py` checks the packages, every device present (CPU, CUDA/ROCm, MPS), every registered network (forward +
 backward) and a 5-fold CV + final model on synthetic phantoms. A missing GPU is reported, not a failure; real
@@ -92,7 +92,8 @@ Per run: `summary.json` = the CV score (pooled lesion-level F1, precision, sensi
 `cmbx train-final <config>` makes it later). Time on one GPU: CV ~2.3 h + final model ~0.5 h for 60 epochs.
 Validated on two in-house cohorts (T2*-GRE 75 cases, SWI 61 cases): reference pooled F1 **0.665** / **0.630**
 (seed noise about +-0.03); this package reproduced 0.644 on the T2* cohort.
-`predict` writes the masks on the **input image grid** (`<id>_mask.nii.gz`, `<id>_prob.nii.gz`), a list of the
+`predict` writes the masks on the **input image grid** (`<id>_mask.nii.gz`, `<id>_prob.nii.gz`, label map
+`<id>_lesions.nii.gz`), a list of the
 microbleeds per scan (`<id>.json`: volume, probability, position) and `predictions.csv`; options (`--folds`,
 `--threshold`, `--csf-rule`, losses, channels, inpainting, ...): docs/DETAILS.md.
 

@@ -6,6 +6,9 @@ The cases are prepared with the run's own preprocessing settings into ``<out>/pr
 
 Outputs in ``<out>/``:
   <id>_mask.nii.gz, <id>_prob.nii.gz   on the INPUT image grid (same matrix and affine as the scan); prob = uint8 p*255
+  <id>_lesions.nii.gz                  the same as a label map: microbleed k of <id>.json has value k (on a coarse input
+                                       grid, e.g. 5 mm slices, two neighbouring microbleeds can touch in the binary mask;
+                                       the label map keeps them apart, and the count in <id>.json is the model-grid count)
   grid/<id>_mask.nii.gz, ..._prob...   on the model grid (0.5 x 0.5 x 1 mm, cropped) where the model works
   <id>.json                            settings + one entry per microbleed (volume, max probability, centre in mm and
                                        as input-image voxel)
@@ -136,6 +139,7 @@ def predict_run(run_dir, cases_path=None, out="pred", threshold=None, min_size=N
         lab_x, p_x = back(lab), back(p)
         nib.save(nib.Nifti1Image(np.round(p_x * 255).astype(np.uint8), r.affine), os.path.join(out, "grid", f"{c['id']}_prob.nii.gz"))
         nib.save(nib.Nifti1Image((lab_x > 0).astype(np.uint8), r.affine), os.path.join(out, "grid", f"{c['id']}_mask.nii.gz"))
+        nib.save(nib.Nifti1Image(lab_x.astype(np.uint16), r.affine), os.path.join(out, "grid", f"{c['id']}_lesions.nii.gz"))
         vox_mm3 = float(abs(np.linalg.det(r.affine[:3, :3])))
         lesions, centres = [], {}
         if native:
@@ -143,6 +147,7 @@ def predict_run(run_dir, cases_path=None, out="pred", threshold=None, min_size=N
             nlab, nprob, centres = to_native(lab_x, p_x, r.affine, target)
             nib.save(nib.Nifti1Image(np.round(np.clip(nprob, 0, 1) * 255).astype(np.uint8), target[1]), os.path.join(out, f"{c['id']}_prob.nii.gz"))
             nib.save(nib.Nifti1Image((nlab > 0).astype(np.uint8), target[1]), os.path.join(out, f"{c['id']}_mask.nii.gz"))
+            nib.save(nib.Nifti1Image(nlab.astype(np.uint16), target[1]), os.path.join(out, f"{c['id']}_lesions.nii.gz"))
             n_native = int(len(set(np.unique(nlab).tolist()) - {0}))
         for k, sl in enumerate(ndimage.find_objects(lab_x), start=1):
             if sl is None:

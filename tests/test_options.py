@@ -74,6 +74,8 @@ def test_predict_outputs_on_input_grid(trained):
         assert g.shape != src.shape[:3]                                                # model grid copy
         info = json.load(open(out / f"{r['id']}.json"))
         assert info["n_lesions"] == len(info["lesions"]) and "warning" not in info
+        lab = np.asarray(nib.load(out / f"{r['id']}_lesions.nii.gz").dataobj)
+        assert set(np.unique(lab).tolist()) - {0} == {e["lesion"] for e in info["lesions"]}   # one value per lesion
         for e in info["lesions"]:
             v = e["centre_voxel"]
             assert all(0 <= v[i] < src.shape[i] for i in range(3)) and e["volume_mm3"] > 0
