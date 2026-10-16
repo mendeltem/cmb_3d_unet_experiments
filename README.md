@@ -78,6 +78,7 @@ source /path/to/miniconda3/etc/profile.d/conda.sh && conda activate /path/to/min
 cd /path/to/cmb_3d_unet_experiments && cmbx run-experiment configs/catalina_t2star.yaml
 ```
 Use the partition and account names of your cluster; activate the env by its absolute path.
+Quick test first (~5 min, synthetic phantoms, no data): `mkdir -p logs && sbatch scripts/slurm_quick_test.sbatch`.
 
 ## License
 
