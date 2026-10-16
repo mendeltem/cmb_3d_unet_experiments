@@ -13,6 +13,7 @@ is tested, nothing is hard-coded.
 Exit code 0 = everything needed for training works here."""
 import argparse
 import importlib
+import os
 import platform
 import sys
 import time
@@ -34,10 +35,17 @@ def main():
     t0 = time.time()
 
     print(f"1. environment  (python {platform.python_version()}, {platform.system()} {platform.machine()})")
+    import site as _site
+    if _site.ENABLE_USER_SITE and os.path.isdir(_site.getusersitepackages()):
+        report(1, "user site (~/.local)", "INFO", "active: its packages can shadow the environment's; env.sh sets PYTHONNOUSERSITE=1")
+    import site
+    user_site = site.getusersitepackages() if site.ENABLE_USER_SITE else None
     for mod in REQUIRED:
         try:
             m = importlib.import_module(mod)
-            report(1, mod, "PASS", getattr(m, "__version__", ""))
+            where = getattr(m, "__file__", "") or ""
+            note = "  (from ~/.local, outside the environment: use `source env.sh`)" if user_site and where.startswith(user_site) else ""
+            report(1, mod, "PASS", getattr(m, "__version__", "") + note)
         except Exception as e:  # noqa: BLE001
             report(1, mod, "FAIL", f"{type(e).__name__}: {e}  -> run ./install.sh")
     try:

@@ -14,6 +14,7 @@
 # Behind a proxy: export http_proxy / https_proxy first.
 set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"; REPO=$(pwd)
+export PYTHONNOUSERSITE=1      # packages in ~/.local must not leak into (or satisfy requirements of) the environment
 NAME=cmbx; PREFIX=""; FORCE_VENV=0; TORCH=auto; TEST=1; DRY=0; RECREATE=0
 TORCH_VERSION=2.6.0; PY_VERSION=3.12
 while [ $# -gt 0 ]; do case "$1" in
@@ -69,6 +70,7 @@ if [ -n "$CONDA" ]; then
     ENVP=$("$CONDA" run "${LOC[@]}" python -c 'import sys; print(sys.prefix)')
     BASE=$("$CONDA" info --base)
     printf '# written by install.sh: activate the cmbx environment (source env.sh)\nsource "%s/etc/profile.d/conda.sh" && conda activate "%s"\n' "$BASE" "$ENVP" > env.sh
+    echo 'export PYTHONNOUSERSITE=1   # ignore packages in ~/.local' >> env.sh
 else
     PYS=""; for p in python3.12 python3.11 python3.10 python3; do command -v $p >/dev/null && \
         $p -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null && { PYS=$p; break; }; done
@@ -87,6 +89,7 @@ else
     fi
     ENVP=$REPO/.venv
     printf '# written by install.sh: activate the cmbx environment (source env.sh)\nsource "%s/bin/activate"\n' "$ENVP" > env.sh
+    echo 'export PYTHONNOUSERSITE=1   # ignore packages in ~/.local' >> env.sh
 fi
 PY=$ENVP/bin/python
 "$PY" -m pip install --upgrade pip
