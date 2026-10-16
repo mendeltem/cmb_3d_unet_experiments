@@ -34,7 +34,7 @@ uniformly, on the data, and every experiment starts from the same corrected inpu
 
 | | |
 |---|---|
-| GPU | NVIDIA GPU with >= 2 GB memory (one training needs ~1.8 GiB) |
+| GPU | GPU with >= 2 GB memory (one training needs ~1.8 GiB): NVIDIA (CUDA), AMD (ROCm build); Apple MPS untested for training; CPU works but is slow |
 | NVIDIA driver | **>= 525** for the default CUDA 12.4 build (`cu124`); a driver >= 450 works with the CUDA 11.8 build: replace `cu124` by `cu118` in `environment.yml` |
 | CUDA toolkit | **not needed**: the PyTorch wheels ship the CUDA libraries; only the driver must be installed |
 | RAM | >= 32 GB (peak ~15-17.5 GB for the T2* cohort) |
@@ -45,12 +45,16 @@ The minimum driver versions follow NVIDIA's CUDA minor-version compatibility (Li
 
 ## Install
 
+Recommended: `./install.sh` (README). It does the steps below automatically and picks the PyTorch build for the
+machine; `./install.sh --dry-run` prints what it would do. Manual install with conda:
+
 ```bash
 conda env create -f environment.yml          # env "cmbx": python 3.12, torch 2.6.0 (CUDA 12.4 wheels), nibabel, ...
 conda activate cmbx
 pip install -e .                             # the `cmbx` command
 cmbx check-env                               # torch / CUDA / GPU memory; what is missing
-pytest -q                                    # 38 tests incl. an end-to-end CV on synthetic phantoms, ~1.5 min on CPU
+python test.py                               # environment, devices, every network, CV on phantoms (~1 min)
+pytest -q                                    # full test suite, ~2 min on CPU
 ```
 CPU-only machine: replace `cu124` by `cpu` in `environment.yml`. Behind a proxy, export `http_proxy`/`https_proxy`
 first. No FSL, HD-BET or FreeSurfer is needed.

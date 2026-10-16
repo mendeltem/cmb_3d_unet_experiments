@@ -33,15 +33,22 @@ def check_env(log=print) -> int:
             missing.append(mod)
     gpu = False
     drv = _driver_version()
-    if drv is None:
+    try:
+        import torch
+        hip = getattr(torch.version, "hip", None)
+    except ImportError:
+        hip = None
+    if hip:
+        log(f"  ok   PyTorch ROCm build (HIP {hip}): AMD GPUs are used through torch.cuda")
+    elif drv is None:
         log("  --   NVIDIA driver: nvidia-smi not found (no NVIDIA GPU or no driver) -> CPU only")
     else:
         dv = tuple(int(x) for x in drv.split(".")[:2])
         ok12, ok11 = dv >= MIN_DRIVER["12"], dv >= MIN_DRIVER["11"]
         log(f"  {'ok  ' if ok12 else '!!  '} NVIDIA driver {drv}: "
             + ("supports the default CUDA 12.4 build (cu124)" if ok12 else
-               "too old for the CUDA 12 build; use cu118 in environment.yml (needs >= 450.80)" if ok11 else
-               "too old for any supported CUDA build (needs >= 450.80); update the driver or use cpu"))
+               "too old for the CUDA 12 build; reinstall with ./install.sh --torch cu118 (needs >= 450.80)" if ok11 else
+               "too old for any supported CUDA build (needs >= 450.80); update the driver or ./install.sh --torch cpu"))
     try:
         import torch
         if torch.cuda.is_available():

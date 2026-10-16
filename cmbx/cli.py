@@ -53,6 +53,11 @@ def cmd_check_env(a):
     sys.exit(check_env())
 
 
+def cmd_selftest(a):
+    from .selftest import selftest
+    sys.exit(selftest(a.data, a.device, a.keep, _log))
+
+
 def cmd_prepare(a):
     from .experiments import ensure_prepared
     ensure_prepared(_cfg(a), a.workers, a.overwrite, _log)
@@ -134,6 +139,12 @@ def main(argv=None):
 
     p = sub.add_parser("check-env", help="check torch/CUDA and the Python packages")
     p.set_defaults(fn=cmd_check_env)
+
+    p = sub.add_parser("selftest", help="one-minute end-to-end check on synthetic phantoms (GPU if visible)")
+    p.add_argument("--data", default=None, help="folder with cases.csv (default: generate phantoms in a temp folder)")
+    p.add_argument("--device", default="auto", help="auto | cuda | cpu")
+    p.add_argument("--keep", action="store_true", help="keep the temporary outputs")
+    p.set_defaults(fn=cmd_selftest)
 
     p = sub.add_parser("prepare", help="preprocess all cases of the case list")
     with_config(p)

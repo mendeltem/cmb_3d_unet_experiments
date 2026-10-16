@@ -8,26 +8,25 @@ Charité T2*-GRE and SWI cohorts; VALDO 2021 Task 2 works as a public example. D
 > **Patient data never go into this repository** (no images, masks, case lists with paths, predictions, weights,
 > per-case tables). The in-house configs write everything to `../cmb_3d_unet_experiments_runs/`, outside the repo.
 
-## Prerequisites
-
-| | |
-|---|---|
-| GPU | NVIDIA GPU with >= 2 GB memory (one training needs ~1.8 GiB) |
-| NVIDIA driver | **>= 525** for the default build (`cu124`); driver 450-524: replace `cu124` by `cu118` in `environment.yml` |
-| CUDA toolkit | **not needed**: the PyTorch wheels contain CUDA; only the driver must be installed (`nvidia-smi` shows it) |
-| RAM / conda | >= 32 GB; Miniconda or Miniforge (behind a proxy: export `http_proxy` / `https_proxy` first) |
-
 ## Install
 
 ```bash
 git clone https://github.com/mendeltem/cmb_3d_unet_experiments.git
 cd cmb_3d_unet_experiments
-conda env create -f environment.yml && conda activate cmbx
-pip install -e .
-cmbx check-env      # driver, CUDA, GPU memory: says what is missing and which build fits
-pytest -q           # 38 tests incl. an end-to-end 5-fold CV on synthetic phantoms (~2 min)
+./install.sh        # ~5 min: Python env + the PyTorch build for this machine + cmbx, then runs test.py
+source env.sh       # activates the environment (in every new shell)
+python test.py      # any time: does everything work here? (~1 min)
 ```
-CPU-only machine: replace `cu124` by `cpu` in `environment.yml` (tests run; real training is impractically slow).
+
+`install.sh` uses conda/mamba if available (otherwise a venv in `.venv`) and picks PyTorch for the hardware:
+NVIDIA (driver >= 525: CUDA 12.4, 450-524: CUDA 11.8), AMD (ROCm), Apple Silicon and ARM (PyPI build), or no GPU
+(the CUDA build, which also runs on the CPU, e.g. on a cluster login node). No CUDA toolkit is needed, only the GPU
+driver. Behind a proxy export `http_proxy` / `https_proxy` first; `./install.sh --help` lists the options
+(`--torch cpu|cu118|...`, `--name`, `--prefix`, `--venv`). Manual alternative: `environment.yml`, see docs/DETAILS.md.
+
+`test.py` checks the packages, every device present (CPU, CUDA/ROCm, MPS), every registered network (forward +
+backward) and a 5-fold CV + final model on synthetic phantoms. A missing GPU is reported, not a failure; real
+training needs a GPU with >= 2 GB memory (one training: ~1.8 GiB) and >= 32 GB RAM. Full test suite: `pytest -q`.
 
 ## Data
 
@@ -71,14 +70,17 @@ Post-processing variants without retraining: `cmbx evaluate <run> --mode crossfo
 
 ## HPC (SLURM)
 
+Install once on the login node (`./install.sh`), then check a GPU node (~1 min, synthetic phantoms, no data):
+```bash
+mkdir -p logs && sbatch scripts/slurm_quick_test.sbatch && squeue --me      # result in logs/cmbx_quick_<job>.out
+```
+A real run (one training needs ~1.8 GiB, so a GPU share is enough where the cluster offers `shard`):
 ```bash
 #!/bin/bash
-#SBATCH --job-name=cmbx --partition=gpu --gres=gpu:1 --cpus-per-task=8 --mem=32G --time=04:00:00
-source /path/to/miniconda3/etc/profile.d/conda.sh && conda activate /path/to/miniconda3/envs/cmbx
-cd /path/to/cmb_3d_unet_experiments && cmbx run-experiment configs/catalina_t2star.yaml
+#SBATCH --job-name=cmbx --partition=gpu --gres=shard:1 --cpus-per-task=8 --mem=32G --time=04:00:00
+cd /path/to/cmb_3d_unet_experiments && source env.sh && cmbx run-experiment configs/catalina_t2star.yaml
 ```
-Use the partition and account names of your cluster; activate the env by its absolute path.
-Quick test first (~5 min, synthetic phantoms, no data): `mkdir -p logs && sbatch scripts/slurm_quick_test.sbatch`.
+Use the partition / GRES names of your cluster (`sinfo -o "%P %G"`); without shards use `--gres=gpu:1`.
 
 ## License
 

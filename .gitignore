@@ -15,3 +15,5 @@ logs/
 
 # Synthetic phantoms are part of the repository (no patient data)
 !examples/phantoms/**/*.nii.gz
+env.sh
+.venv/
