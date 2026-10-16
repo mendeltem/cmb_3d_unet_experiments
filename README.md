@@ -72,11 +72,11 @@ reference masks.
 The whole workflow on the synthetic BIDS example (about 20 s on a GPU, 2.5 min on a CPU; the cross-validation
 finds the 13 phantom microbleeds; the numbers say nothing about real data):
 ```bash
-cmbx make-caselist --bids examples/bids_train --out ../my_runs/cases.csv
-cmbx run-experiment configs/example.yaml --set output_root=../my_runs/runs \
-    data.cases=../my_runs/cases.csv data.prepared_dir=../my_runs/prepared data.splits=../my_runs/splits.json
-cmbx make-caselist --bids examples/bids_new --no-folds --out ../my_runs/new/cases.csv
-cmbx predict --run ../my_runs/runs/example --cases ../my_runs/new/cases.csv --out ../my_runs/pred
+cmbx make-caselist --bids examples/bids_train --out ../my_runs/example/cases.csv
+cmbx run-experiment configs/example.yaml --set output_root=../my_runs/example/runs data.cases=../my_runs/example/cases.csv \
+    data.prepared_dir=../my_runs/example/prepared data.splits=../my_runs/example/splits.json
+cmbx make-caselist --bids examples/bids_new --no-folds --out ../my_runs/example/new/cases.csv
+cmbx predict --run ../my_runs/example/runs/example --cases ../my_runs/example/new/cases.csv --out ../my_runs/example/pred
 ```
 Your data, real training:
 ```bash
