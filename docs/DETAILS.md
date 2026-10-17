@@ -351,6 +351,19 @@ cmbx adds `--inpaint`, `--frst`, `--frst_from`, `--csf_rule`, `--flair`, `--disc
 setting of the configuration (below). Case names follow MicrobleedNet: the file name before `-ir`; without `-f True`
 prefixed by the parent folder (`<folder>-<name>`).
 
+Left out, a MicrobleedNet option takes this package's own recipe, not MicrobleedNet's. `--defaults microbleednet` on
+`train`, `fine_tune` and `cross_validate` switches the starting point to MicrobleedNet's own values: every option in
+the table above that you did **not** type takes the value of `console_commands/microbleednet.py` at commit 958f1cb —
+`-tr_prop 0.8`, `-bfactor 10`, `-psize 48` (cubic), `-af 2`, `-da True`, `-cand_disc True` (step 2 =
+teacher–student), `-lrm 10`, `-gamma 0.1`, `-opt adam`, `-eps 1e-4`, `-mom 0.9`, `-es 20`, `-cp_type last`, `-cp_n 10`,
+and per command `train`: `-ilr 0.001`, `-bs 4`, `-ep 100`; `fine_tune`: `-ilr 0.0001`, `-bs 8`, `-ep 60`;
+`cross_validate`: `-ilr 0.001`, `-bs 8`, `-ep 60`. Options you type still win, so
+`cmbx train ... --defaults microbleednet -ep 60` keeps everything else MicrobleedNet's and trains 60 epochs.
+`--defaults cmbx` (the default) changes nothing. `-ftlayers` is deliberately not filled: its numbers refer to MicrobleedNet's own decoder blocks ("1 2 -> final two decoder
+layers"), not to the cmbx levels (1 = output ... 9 = input). A key you set with `--set` (e.g. `--set train.lr=0.0003`)
+is not overridden by the preset. A note lists the
+options that were filled.
+
 ## Differences to MicrobleedNet
 
 MicrobleedNet: Sundaresan et al., Front Neuroinform 17 (2023), doi:10.3389/fninf.2023.1204186; code

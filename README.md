@@ -93,6 +93,17 @@ cmbx train -i examples/train/derivatives -l examples/train/derivatives/preproces
 Every MicrobleedNet option works (`-tr_prop`, `-es`, `-cp_type`, `-lrm`, `-opt`, ...): `cmbx train --help`,
 [docs/DETAILS.md](docs/DETAILS.md#microbleednet-options).
 
+Without the switch the options you leave out keep cmbx's own recipe. To start from MicrobleedNet's own values
+instead, add `--defaults microbleednet` (also on `fine_tune` and `cross_validate`): every MicrobleedNet option you did
+not type on the command line then takes the value MicrobleedNet uses (`-tr_prop 0.8`, `-bfactor 10`, `-psize 48`,
+`-af 2`, `-da True`, `-cand_disc True`, `-lrm 10`, `-gamma 0.1`, `-opt adam`, `-eps 1e-4`, `-mom 0.9`, `-es 20`,
+`-cp_type last`, `-cp_n 10`, `-bs 4`, `-ep 100`, `-ilr 0.001`; for `fine_tune` `-bs 8`, `-ep 60`, `-ilr 0.0001`,
+for `cross_validate` `-bs 8`, `-ep 60`, `-ilr 0.001`). Options you type still win, so
+`cmbx train ... --defaults microbleednet -ep 60` runs MicrobleedNet's settings for 60 epochs. `--defaults cmbx` (the
+default) changes nothing. `-ftlayers` is not filled: its numbers refer to MicrobleedNet's own decoder blocks ("1 2 -> final two decoder
+layers"), not to the cmbx levels (1 = output ... 9 = input), so set it yourself if needed. A key you set with `--set`
+(e.g. `--set train.lr=0.0003`) is not overridden by the preset.
+
 ## Fine-tune the pretrained model
 
 ```bash

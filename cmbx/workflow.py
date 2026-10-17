@@ -49,6 +49,23 @@ S26 = np.ones((3, 3, 3), bool)
 NO_EFFECT = {"verbose": "-v", "progress_bar": "-pbar", "cp_load_type_ft": "-cpld_type", "cpload_everyn_N": "-cpld_n",
              "num_classes": "-nclass", "save_checkpoint": "-sv"}
 
+# MicrobleedNet's own defaults for the options it shares with cmbx (console_commands/microbleednet.py, commit 958f1cb).
+# `--defaults microbleednet` fills every option left out with these; `-ftlayers` is NOT mapped (its numbers refer to
+# MicrobleedNet's own decoder blocks, "1 2 -> final two decoder layers", not to the cmbx levels 1 = output ... 9 = input).
+MBNET_COMMON = dict(train_prop=0.8, batch_factor=10, patch_size=48, aug_factor=2, data_augmentation=True,
+                    cand_discrimination=True, lr_sch_mlstone=[10], lr_sch_gamma=0.1, optimizer="adam", epsilon=1e-4,
+                    momentum=0.9, early_stop_val=20, cp_save_type="last", cp_everyn_N=10)
+# config key behind each preset option (as build_config maps them), so that --set on that key beats the preset
+PRESET_KEYS = dict(train_prop="train.train_prop", batch_factor="train.subjects_per_epoch", patch_size="train.patch_size",
+                   aug_factor="train.aug_factor", data_augmentation="train.flip_augment", cand_discrimination="stage2.enabled",
+                   lr_sch_mlstone="train.lr_milestones", lr_sch_gamma="train.lr_gamma", optimizer="train.optimizer",
+                   epsilon="train.epsilon", momentum="train.momentum", early_stop_val="train.early_stop",
+                   cp_save_type="train.checkpoint", cp_everyn_N="train.checkpoint_every", init_learng_rate="train.lr",
+                   batch_size="train.batch_size", num_epochs="train.epochs")
+MBNET_DEFAULTS = {"train": dict(MBNET_COMMON, init_learng_rate=1e-3, batch_size=4, num_epochs=100),
+                  "fine_tune": dict(MBNET_COMMON, init_learng_rate=1e-4, batch_size=8, num_epochs=60),
+                  "cross_validate": dict(MBNET_COMMON, init_learng_rate=1e-3, batch_size=8, num_epochs=60)}
+
 
 def str2bool(v) -> bool:
     """MicrobleedNet declares its switches as ``type=bool`` (any text, even "False", is True); here True/False are read."""
@@ -269,8 +286,53 @@ def _given(a, k) -> bool:
     return getattr(a, k, None) is not None
 
 
+def _mbnet_command(a) -> Optional[str]:
+    """Which of the three training commands ``a`` belongs to (``MBNET_DEFAULTS`` key); None for anything else."""
+    cmd = str(getattr(a, "cmd", "") or "")
+    cmd = {"fine-tune": "fine_tune", "cross-validate": "cross_validate"}.get(cmd, cmd)
+    if cmd in MBNET_DEFAULTS:
+        return cmd
+    if hasattr(a, "cv_fold"):                              # cross_validate
+        return "cross_validate"
+    if hasattr(a, "model_dir"):                            # train
+        return "train"
+    if hasattr(a, "pretrained_model"):                     # fine_tune
+        return "fine_tune"
+    return None
+
+
+def apply_defaults(a, log=print) -> None:
+    """``--defaults microbleednet``: fill every MicrobleedNet option the user left out with MicrobleedNet's own default.
+
+    An option is left out while it is None (``_given``); options the user typed are kept. ``--defaults cmbx`` (the
+    default) and namespaces without the switch change nothing. ``-ftlayers`` is deliberately not filled (MicrobleedNet's
+    decoder blocks do not correspond one to one to the cmbx levels). A config key given with ``--set`` (or in ``--config``
+    via --set) is not overridden by the preset: the preset only stands in for options nobody gave.
+    """
+    name = getattr(a, "defaults", "cmbx")
+    if name != "microbleednet":
+        return
+    cmd = _mbnet_command(a)
+    vals = MBNET_DEFAULTS.get(cmd) if cmd else None
+    if not vals:
+        return
+    set_keys = {str(kv).split("=", 1)[0].strip() for kv in (getattr(a, "set", None) or [])}
+    filled = []
+    for opt, value in vals.items():
+        if PRESET_KEYS.get(opt) in set_keys:               # --set train.lr=... beats the preset
+            continue
+        if getattr(a, opt, None) is None:
+            setattr(a, opt, list(value) if isinstance(value, list) else value)
+            filled.append(opt)
+    a._mbnet_filled = set(filled)
+    if filled:
+        log(f"defaults {name} ({cmd}): MicrobleedNet's own value (958f1cb) for {len(filled)} option(s) you did not "
+            "give: " + ", ".join(f"-{k}" for k in sorted(filled)))
+
+
 def build_config(a, run_dir: str, cases: str, prepared: str, log=print) -> Dict:
     from .config import load_config, parse_set
+    apply_defaults(a, log)
     cfg = load_config(getattr(a, "config", None), parse_set(getattr(a, "set", None) or []))
     cfg["name"], cfg["output_root"] = os.path.basename(os.path.normpath(run_dir)), os.path.dirname(os.path.abspath(run_dir))
     cfg["data"].update(cases=os.path.abspath(cases), prepared_dir=os.path.abspath(prepared),
@@ -488,8 +550,9 @@ def cross_validate(a, log=print) -> str:
         T = cfg["train"]
         T["min_epochs"], T["patience"] = 0, max(1, -(-int(a.early_stop_val) // int(T["eval_every"])))
         T["early_stop"] = 0
-    if _given(a, "train_prop"):
-        log("note: -tr_prop has no effect in cross_validate: the inner fold of every training split chooses the epoch and cell")
+    if _given(a, "train_prop"):                            # CV ignores it: the inner fold chooses the epoch and cell
+        if "train_prop" not in getattr(a, "_mbnet_filled", ()):
+            log("note: -tr_prop has no effect in cross_validate: the inner fold of every training split chooses the epoch and cell")
         cfg["train"]["train_prop"] = 1.0
     if cfg["train"].get("checkpoint") != "last":
         cfg["train"]["checkpoint"] = "last"                # the CV keeps the inner-fold best state anyway
@@ -788,6 +851,9 @@ def _common_train(p, fine_tune: bool = False, cv: bool = False) -> None:
     c.add_argument("--work_dir", default=None, help="grid volumes and derived files [<-i>/cmbx]")
     c.add_argument("--config", default=None, help="experiment YAML: any other setting (docs/DETAILS.md)")
     c.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE", help="override config keys, e.g. train.lr=0.0001")
+    c.add_argument("--defaults", choices=["cmbx", "microbleednet"], default="cmbx",
+                   help="cmbx: the recipe in docs/DETAILS.md [default]; microbleednet: MicrobleedNet's own value "
+                        "(958f1cb) for every MicrobleedNet option you did not give")
     c.add_argument("--overwrite", type=B, default=False, help="train again into an existing model folder [False]")
     if cv:
         c.add_argument("--fold_seed", type=int, default=0, help="fold assignment seed [0]")
