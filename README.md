@@ -91,7 +91,10 @@ cmbx train -i examples/train/derivatives -l examples/train/derivatives/preproces
 | `-ep`, `-ilr`, `-bs` | `60`, `0.0003`, `4` | epochs, learning rate, batch size |
 
 Every MicrobleedNet option works (`-tr_prop`, `-es`, `-cp_type`, `-lrm`, `-opt`, ...): `cmbx train --help`,
-[docs/DETAILS.md](docs/DETAILS.md#microbleednet-options).
+[docs/DETAILS.md](docs/DETAILS.md#microbleednet-options). `tests/test_microbleednet_parity.py` checks all 96 options of
+MicrobleedNet's five commands (commit 958f1cb): each is accepted, reaches the config or is reported as without effect, and
+`--defaults microbleednet` gives MicrobleedNet's own defaults; one run sets every option at once. One intended difference:
+switches read `False` as False (MicrobleedNet's `type=bool` turns any text, even "False", into True).
 
 Without the switch the options you leave out keep cmbx's own recipe. To start from MicrobleedNet's own values
 instead, add `--defaults microbleednet` (also on `fine_tune` and `cross_validate`): every MicrobleedNet option you did

@@ -1,0 +1,1167 @@
+{
+ "source": "https://github.com/v-sundaresan/microbleed-detection, commit 958f1cb, microbleednet/console_commands/microbleednet.py (argparse definitions only: flags, dest, type, default, required, nargs)",
+ "commands": {
+  "preprocess": [
+   {
+    "flags": [
+     "-i",
+     "--inp_dir"
+    ],
+    "dest": "inp_dir",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-o",
+     "--out_dir"
+    ],
+    "dest": "out_dir",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-ir",
+     "--image_regex"
+    ],
+    "dest": "image_regex",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-l",
+     "--label_dir"
+    ],
+    "dest": "label_dir",
+    "type": "str",
+    "default": null,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-lr",
+     "--label_regex"
+    ],
+    "dest": "label_regex",
+    "type": "str",
+    "default": null,
+    "required": false,
+    "nargs": "+",
+    "choices": null
+   },
+   {
+    "flags": [
+     "-f",
+     "--fsl_preprocessed"
+    ],
+    "dest": "fsl_preprocessed",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-v",
+     "--verbose"
+    ],
+    "dest": "verbose",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-pbar",
+     "--progress_bar"
+    ],
+    "dest": "progress_bar",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   }
+  ],
+  "train": [
+   {
+    "flags": [
+     "-i",
+     "--inp_dir"
+    ],
+    "dest": "inp_dir",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-l",
+     "--label_dir"
+    ],
+    "dest": "label_dir",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-m",
+     "--model_dir"
+    ],
+    "dest": "model_dir",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-tr_prop",
+     "--train_prop"
+    ],
+    "dest": "train_prop",
+    "type": "float",
+    "default": 0.8,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-bfactor",
+     "--batch_factor"
+    ],
+    "dest": "batch_factor",
+    "type": "int",
+    "default": 10,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-psize",
+     "--patch_size"
+    ],
+    "dest": "patch_size",
+    "type": "int",
+    "default": 48,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cand_det",
+     "--cand_detection"
+    ],
+    "dest": "cand_detection",
+    "type": "bool",
+    "default": true,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cand_disc",
+     "--cand_discrimination"
+    ],
+    "dest": "cand_discrimination",
+    "type": "bool",
+    "default": true,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-da",
+     "--data_augmentation"
+    ],
+    "dest": "data_augmentation",
+    "type": "bool",
+    "default": true,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-af",
+     "--aug_factor"
+    ],
+    "dest": "aug_factor",
+    "type": "int",
+    "default": 2,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-sv_resume",
+     "--save_resume_training"
+    ],
+    "dest": "save_resume_training",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-ilr",
+     "--init_learng_rate"
+    ],
+    "dest": "init_learng_rate",
+    "type": "float",
+    "default": 0.001,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-lrm",
+     "--lr_sch_mlstone"
+    ],
+    "dest": "lr_sch_mlstone",
+    "type": "int",
+    "default": 10,
+    "required": false,
+    "nargs": "+",
+    "choices": null
+   },
+   {
+    "flags": [
+     "-gamma",
+     "--lr_sch_gamma"
+    ],
+    "dest": "lr_sch_gamma",
+    "type": "float",
+    "default": 0.1,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-opt",
+     "--optimizer"
+    ],
+    "dest": "optimizer",
+    "type": "str",
+    "default": "adam",
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-eps",
+     "--epsilon"
+    ],
+    "dest": "epsilon",
+    "type": "float",
+    "default": 0.0001,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-mom",
+     "--momentum"
+    ],
+    "dest": "momentum",
+    "type": "float",
+    "default": 0.9,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-bs",
+     "--batch_size"
+    ],
+    "dest": "batch_size",
+    "type": "int",
+    "default": 4,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-ep",
+     "--num_epochs"
+    ],
+    "dest": "num_epochs",
+    "type": "int",
+    "default": 100,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-es",
+     "--early_stop_val"
+    ],
+    "dest": "early_stop_val",
+    "type": "int",
+    "default": 20,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-sv_mod",
+     "--save_full_model"
+    ],
+    "dest": "save_full_model",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cp_type",
+     "--cp_save_type"
+    ],
+    "dest": "cp_save_type",
+    "type": "str",
+    "default": "last",
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cp_n",
+     "--cp_everyn_N"
+    ],
+    "dest": "cp_everyn_N",
+    "type": "int",
+    "default": 10,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-v",
+     "--verbose"
+    ],
+    "dest": "verbose",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-mgpu",
+     "--multi_gpu"
+    ],
+    "dest": "multi_gpu",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   }
+  ],
+  "evaluate": [
+   {
+    "flags": [
+     "-i",
+     "--inp_dir"
+    ],
+    "dest": "inp_dir",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-m",
+     "--model_name"
+    ],
+    "dest": "model_name",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-o",
+     "--output_dir"
+    ],
+    "dest": "output_dir",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-p",
+     "--pretrained_model"
+    ],
+    "dest": "pretrained_model",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-int",
+     "--intermediate"
+    ],
+    "dest": "intermediate",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cp_type",
+     "--cp_load_type"
+    ],
+    "dest": "cp_load_type",
+    "type": "str",
+    "default": "last",
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cp_n",
+     "--cp_everyn_N"
+    ],
+    "dest": "cp_everyn_N",
+    "type": "int",
+    "default": null,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-v",
+     "--verbose"
+    ],
+    "dest": "verbose",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   }
+  ],
+  "fine_tune": [
+   {
+    "flags": [
+     "-i",
+     "--inp_dir"
+    ],
+    "dest": "inp_dir",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-l",
+     "--label_dir"
+    ],
+    "dest": "label_dir",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-m",
+     "--model_name"
+    ],
+    "dest": "model_name",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-o",
+     "--output_dir"
+    ],
+    "dest": "output_dir",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-p",
+     "--pretrained_model"
+    ],
+    "dest": "pretrained_model",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cpld_type",
+     "--cp_load_type"
+    ],
+    "dest": "cp_load_type",
+    "type": "str",
+    "default": "last",
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cpld_n",
+     "--cpload_everyn_N"
+    ],
+    "dest": "cpload_everyn_N",
+    "type": "int",
+    "default": 10,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-ftlayers",
+     "--ft_layers"
+    ],
+    "dest": "ft_layers",
+    "type": "int",
+    "default": 2,
+    "required": false,
+    "nargs": "+",
+    "choices": null
+   },
+   {
+    "flags": [
+     "-tr_prop",
+     "--train_prop"
+    ],
+    "dest": "train_prop",
+    "type": "float",
+    "default": 0.8,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-bfactor",
+     "--batch_factor"
+    ],
+    "dest": "batch_factor",
+    "type": "int",
+    "default": 10,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-psize",
+     "--patch_size"
+    ],
+    "dest": "patch_size",
+    "type": "int",
+    "default": 48,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cand_det",
+     "--cand_detection"
+    ],
+    "dest": "cand_detection",
+    "type": "bool",
+    "default": true,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cand_disc",
+     "--cand_discrimination"
+    ],
+    "dest": "cand_discrimination",
+    "type": "bool",
+    "default": true,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-da",
+     "--data_augmentation"
+    ],
+    "dest": "data_augmentation",
+    "type": "bool",
+    "default": true,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-af",
+     "--aug_factor"
+    ],
+    "dest": "aug_factor",
+    "type": "int",
+    "default": 2,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-sv_resume",
+     "--save_resume_training"
+    ],
+    "dest": "save_resume_training",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-ilr",
+     "--init_learng_rate"
+    ],
+    "dest": "init_learng_rate",
+    "type": "float",
+    "default": 0.0001,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-lrm",
+     "--lr_sch_mlstone"
+    ],
+    "dest": "lr_sch_mlstone",
+    "type": "int",
+    "default": 10,
+    "required": false,
+    "nargs": "+",
+    "choices": null
+   },
+   {
+    "flags": [
+     "-gamma",
+     "--lr_sch_gamma"
+    ],
+    "dest": "lr_sch_gamma",
+    "type": "float",
+    "default": 0.1,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-opt",
+     "--optimizer"
+    ],
+    "dest": "optimizer",
+    "type": "str",
+    "default": "adam",
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-eps",
+     "--epsilon"
+    ],
+    "dest": "epsilon",
+    "type": "float",
+    "default": 0.0001,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-mom",
+     "--momentum"
+    ],
+    "dest": "momentum",
+    "type": "float",
+    "default": 0.9,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-bs",
+     "--batch_size"
+    ],
+    "dest": "batch_size",
+    "type": "int",
+    "default": 8,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-ep",
+     "--num_epochs"
+    ],
+    "dest": "num_epochs",
+    "type": "int",
+    "default": 60,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-es",
+     "--early_stop_val"
+    ],
+    "dest": "early_stop_val",
+    "type": "int",
+    "default": 20,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-sv_mod",
+     "--save_full_model"
+    ],
+    "dest": "save_full_model",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cp_type",
+     "--cp_save_type"
+    ],
+    "dest": "cp_save_type",
+    "type": "str",
+    "default": "last",
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cp_n",
+     "--cp_everyn_N"
+    ],
+    "dest": "cp_everyn_N",
+    "type": "int",
+    "default": 10,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-v",
+     "--verbose"
+    ],
+    "dest": "verbose",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   }
+  ],
+  "cross_validate": [
+   {
+    "flags": [
+     "-i",
+     "--inp_dir"
+    ],
+    "dest": "inp_dir",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-l",
+     "--label_dir"
+    ],
+    "dest": "label_dir",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-o",
+     "--output_dir"
+    ],
+    "dest": "output_dir",
+    "type": "str",
+    "default": null,
+    "required": true,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-fold",
+     "--cv_fold"
+    ],
+    "dest": "cv_fold",
+    "type": "int",
+    "default": 5,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-resume_fold",
+     "--resume_from_fold"
+    ],
+    "dest": "resume_from_fold",
+    "type": "int",
+    "default": 1,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-tr_prop",
+     "--train_prop"
+    ],
+    "dest": "train_prop",
+    "type": "float",
+    "default": 0.8,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-bfactor",
+     "--batch_factor"
+    ],
+    "dest": "batch_factor",
+    "type": "int",
+    "default": 10,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-psize",
+     "--patch_size"
+    ],
+    "dest": "patch_size",
+    "type": "int",
+    "default": 48,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-da",
+     "--data_augmentation"
+    ],
+    "dest": "data_augmentation",
+    "type": "bool",
+    "default": true,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-af",
+     "--aug_factor"
+    ],
+    "dest": "aug_factor",
+    "type": "int",
+    "default": 2,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-sv_resume",
+     "--save_resume_training"
+    ],
+    "dest": "save_resume_training",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-ilr",
+     "--init_learng_rate"
+    ],
+    "dest": "init_learng_rate",
+    "type": "float",
+    "default": 0.001,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-lrm",
+     "--lr_sch_mlstone"
+    ],
+    "dest": "lr_sch_mlstone",
+    "type": "int",
+    "default": 10,
+    "required": false,
+    "nargs": "+",
+    "choices": null
+   },
+   {
+    "flags": [
+     "-gamma",
+     "--lr_sch_gamma"
+    ],
+    "dest": "lr_sch_gamma",
+    "type": "float",
+    "default": 0.1,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-opt",
+     "--optimizer"
+    ],
+    "dest": "optimizer",
+    "type": "str",
+    "default": "adam",
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-eps",
+     "--epsilon"
+    ],
+    "dest": "epsilon",
+    "type": "float",
+    "default": 0.0001,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-mom",
+     "--momentum"
+    ],
+    "dest": "momentum",
+    "type": "float",
+    "default": 0.9,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-bs",
+     "--batch_size"
+    ],
+    "dest": "batch_size",
+    "type": "int",
+    "default": 8,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-ep",
+     "--num_epochs"
+    ],
+    "dest": "num_epochs",
+    "type": "int",
+    "default": 60,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-es",
+     "--early_stop_val"
+    ],
+    "dest": "early_stop_val",
+    "type": "int",
+    "default": 20,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-int",
+     "--intermediate"
+    ],
+    "dest": "intermediate",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-sv",
+     "--save_checkpoint"
+    ],
+    "dest": "save_checkpoint",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-sv_mod",
+     "--save_full_model"
+    ],
+    "dest": "save_full_model",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cp_type",
+     "--cp_save_type"
+    ],
+    "dest": "cp_save_type",
+    "type": "str",
+    "default": "last",
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-cp_n",
+     "--cp_everyn_N"
+    ],
+    "dest": "cp_everyn_N",
+    "type": "int",
+    "default": 10,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-v",
+     "--verbose"
+    ],
+    "dest": "verbose",
+    "type": "bool",
+    "default": false,
+    "required": false,
+    "nargs": null,
+    "choices": null
+   }
+  ]
+ }
+}
