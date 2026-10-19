@@ -84,7 +84,8 @@ folder that holds `images/<id>_preproc` and `frsts/<id>_frst` (`<cohort>/derivat
 (`derivatives/preprocessed`): the image is inverted back and MicrobleedNet's FRST becomes the second channel
 (`frst_mbnet`, resampled with the image), so both methods see the same inputs; `--inpaint True` reads
 `images_inpainted/` + `frsts_inpainted/`; `--frst_from cmbx` computes the cmbx FRST instead. `-i <cohort>` (or
-`derivatives/preprocessed`) uses the bias-corrected scan and the cmbx FRST. A genuine `microbleednet preprocess` output
+`derivatives/preprocessed`) uses the bias-corrected scan and the same FRST from `frsts/` (`frsts_inpainted/`), so
+`-i <cohort>` and `-i <cohort>/derivatives` train the same model; without `frsts/` cmbx computes the FRST. A genuine `microbleednet preprocess` output
 (no `preprocessed/` next to `images/`) has inpainted `images/`; without `--inpaint` its `fsl_preprocessed/images` is used.
 
 | file in `<case>/` | training (`cmbx train`, `cross_validate`) | inference (`cmbx evaluate`) |
@@ -348,7 +349,12 @@ even "False", as true).
 
 cmbx adds `--inpaint`, `--frst`, `--frst_from`, `--csf_rule`, `--flair`, `--disc_model`, `--kd_temperature`, `--kd_alpha`, `--loss`,
 `--patches`, `--seed`, `--device`, `--work_dir`, `--overwrite`, and `--config <yaml>` / `--set key=value` for every
-setting of the configuration (below). Case names follow MicrobleedNet: the file name before `-ir`; without `-f True`
+setting of the configuration (below). A value in the `--config` file or in `--set` counts as given: `train.train_prop`
+there replaces the default 0.8, `train.lr` the fine_tune default 0.0001. `fine_tune` builds the network of the start
+model and keeps its patch size and grid (`preprocess.spacing`, `margin`, `reorient`, `brain_mask_mode`,
+`interpolation_order`) unless you set them, so a model trained with its own `--config` is fine-tuned without that file.
+`--overwrite True` with other settings first moves the old `final/meta.json` aside (`meta.json.superseded-<time>`):
+a run that stops early does not leave the old model looking finished. Case names follow MicrobleedNet: the file name before `-ir`; without `-f True`
 prefixed by the parent folder (`<folder>-<name>`).
 
 Left out, a MicrobleedNet option takes this package's own recipe, not MicrobleedNet's. `--defaults microbleednet` on

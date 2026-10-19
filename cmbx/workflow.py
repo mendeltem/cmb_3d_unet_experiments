@@ -245,6 +245,8 @@ def collect(inp: str, label_dir: Optional[str] = None, need_labels: bool = False
             if not brain:
                 missing.append((n, f"{n}_brainmask.nii.gz"))
                 continue
+            if os.path.basename(inp) == "preprocessed":   # cohort layout: MicrobleedNet's FRST next to it, as with -i derivatives
+                frst_file = _nii(os.path.join(os.path.dirname(inp), "frsts_inpainted" if inpaint else "frsts"), n, "_frst") or ""
         if need_labels and not label:
             missing.append((n, f"microbleed mask ({n}_cmb.nii.gz in -i or -l)"))
             continue
@@ -284,6 +286,18 @@ def _lesions(rows: List[Dict]) -> None:
 # ---------------------------------------------------------------- options -> config
 def _given(a, k) -> bool:
     return getattr(a, k, None) is not None
+
+
+def _config_keys(a) -> set:
+    """Dotted config keys the user set in the --config YAML or with --set, e.g. {"train.train_prop"}."""
+    import yaml
+    from .config import parse_set
+
+    def flat(d, pre=""):
+        for k, v in (d or {}).items():
+            yield from flat(v, f"{pre}{k}.") if isinstance(v, dict) else [f"{pre}{k}"]
+    path = getattr(a, "config", None)
+    return set(flat(yaml.safe_load(open(path)) if path else {})) | set(flat(parse_set(getattr(a, "set", None) or [])))
 
 
 def _mbnet_command(a) -> Optional[str]:
@@ -419,6 +433,9 @@ def _model_arg(name: str, pretrained: Optional[bool], log) -> str:
     return name
 
 
+GRID_KEYS = ("reorient", "brain_mask_mode", "spacing", "margin", "interpolation_order")   # preprocess keys of the grid
+
+
 def _same_model(run_dir: str, cfg: Dict) -> Optional[bool]:
     """None: no finished model; True/False: finished with the same / another config."""
     import yaml
@@ -453,6 +470,19 @@ def train(a, log=print, fine_tune: bool = False) -> str:
     work = a.work_dir or default_work(preprocessed_folder(a.inp_dir))
     cases = os.path.join(run_dir, "cases.csv")
     cfg = build_config(a, run_dir, cases, os.path.join(work, "grid"), log)
+    keys = _config_keys(a)
+    if fine_tune:                                          # the start model fixes the network, its patch and its grid
+        import yaml
+        old = yaml.safe_load(open(os.path.join(init, "config.yaml")))
+        took = []
+        for sec, k in [("model", k) for k in old.get("model", {})] + [("preprocess", k) for k in GRID_KEYS] + \
+                [("train", "patch_size")]:
+            if k in old.get(sec, {}) and f"{sec}.{k}" not in keys and not (k == "patch_size" and _given(a, "patch_size")) \
+                    and cfg[sec].get(k) != old[sec][k]:
+                cfg[sec][k] = old[sec][k]
+                took.append(f"{sec}.{k}={old[sec][k]}")
+        if took:
+            log("fine_tune: as the start model " + ", ".join(took))
     csf = bool(cfg["postprocess"]["csf_rule"])
     rows = collect(a.inp_dir, a.label_dir, need_labels=True, inpaint=inpaint, need_tissue=csf, work=work, log=log,
                    need_flair="flair" in cfg["train"]["channels"])
@@ -461,20 +491,21 @@ def train(a, log=print, fine_tune: bool = False) -> str:
     use_given_frst(cfg, rows, getattr(a, "frst_from", None), log)
     cfg["data"]["prepared_dir"] = _prepared_dir(work, cfg, inpaint)
     T = cfg["train"]
-    if not _given(a, "train_prop") and "train_prop" not in str(getattr(a, "set", "")):
+    if not _given(a, "train_prop") and "train.train_prop" not in keys:
         T["train_prop"] = 0.8                              # MicrobleedNet's default: 20 % of the cases held out
     if fine_tune:
-        import yaml
         T["init_from"] = init
-        old = yaml.safe_load(open(os.path.join(init, "config.yaml")))
         if not _given(a, "frst"):                          # keep the channels of the model being fine-tuned
             T["channels"] = old["train"]["channels"]
-        if not _given(a, "init_learng_rate"):
+        if not _given(a, "init_learng_rate") and "train.lr" not in keys:
             T["lr"] = 1e-4                                 # MicrobleedNet fine_tune default
     check_config(cfg)
     same = _same_model(run_dir, cfg)
     if same is False and not a.overwrite:
         raise SystemExit(f"{run_dir} holds a model trained with other settings; choose another folder or add --overwrite True")
+    meta = os.path.join(run_dir, "final", "meta.json")
+    if same is not True and os.path.exists(meta):          # new settings: a run that stops early must not leave the old
+        os.replace(meta, f"{meta}.superseded-{time.strftime('%Y%m%d-%H%M%S')}")   # model looking finished for the new config
     C.dump(cfg, os.path.join(run_dir, "config.yaml"))
     _workflow_json(run_dir, dict(command="fine_tune" if fine_tune else "train", inp_dir=os.path.abspath(a.inp_dir),
                                  inpaint=inpaint, csf_rule=csf, init=init, cases=len(rows), channels=T["channels"]))
@@ -656,7 +687,7 @@ def preprocess(a, log=print) -> str:
         flair_src = _find(a.flair_dir or a.inp_dir, name if a.fsl_preprocessed else os.path.basename(basepath),
                           [a.flair_regex + ".nii.gz", a.flair_regex + ".nii"], next_to=basepath) if a.flair_regex else None
         if flair_src and (not os.path.exists(fl) or a.overwrite or (a.synthseg and not os.path.exists(seg))):
-            if a.flair_registered:                         # already on the scan matrix: bias field + brain mask only
+            if a.flair_registered:                         # already on the scan matrix: brain mask only, no FSL
                 ref = nib.load(img)
                 f = nib.load(flair_src)
                 if f.shape[:3] != ref.shape[:3]:

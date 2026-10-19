@@ -7,6 +7,7 @@ import os
 
 import nibabel as nib
 import numpy as np
+import pytest
 
 from cmbx.caselist import bids_patterns, build_caselist
 from cmbx.config import load_config
@@ -59,6 +60,20 @@ def test_shipped_examples_match_the_layout(tmp_path):
         a = sorted(os.path.relpath(f, ref) for f in glob.glob(os.path.join(ref, "**", "*.*"), recursive=True))
         b = sorted(os.path.relpath(f, os.path.join(ROOT, "examples", name))
                    for f in glob.glob(os.path.join(ROOT, "examples", name, "**", "*.*"), recursive=True))
+        b = [f for f in b if not f.startswith(os.path.join("derivatives", "cmbx", ""))]   # written by training, ignored by git
         assert a == b, name
         assert all(filecmp.cmp(os.path.join(ref, f), os.path.join(ROOT, "examples", name, f), shallow=False) for f in a
                    if f.endswith(".tsv"))
+
+
+def test_training_output_in_examples_is_ignored_by_git():
+    """cmbx train -i examples/train writes examples/train/derivatives/cmbx: git must not offer it for a commit."""
+    import shutil
+    import subprocess
+    if not shutil.which("git") or not os.path.isdir(os.path.join(ROOT, ".git")) and not os.path.isfile(os.path.join(ROOT, ".git")):
+        pytest.skip("not a git checkout")
+    probe = os.path.join("examples", "train", "derivatives", "cmbx", "inputs", "phantom-00_images.nii.gz")
+    assert subprocess.run(["git", "check-ignore", "-q", "--no-index", probe], cwd=ROOT).returncode == 0
+    assert subprocess.run(["git", "check-ignore", "-q", "--no-index",
+                           os.path.join("examples", "train", "derivatives", "preprocessed", "phantom-00",
+                                        "phantom-00_t2star.nii.gz")], cwd=ROOT).returncode == 1

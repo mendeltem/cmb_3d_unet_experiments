@@ -15,6 +15,8 @@ logs/
 
 # Synthetic phantoms are part of the repository (no patient data)
 !examples/**/*.nii.gz
+# ...but not what training writes next to them (grid volumes, MicrobleedNet inputs turned back)
+**/derivatives/cmbx/
 env.sh
 .venv/
 models/

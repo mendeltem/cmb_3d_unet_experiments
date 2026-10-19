@@ -58,7 +58,8 @@ cmbx preprocess -i examples/raw -ir _T2starw -f True -b examples/raw -br _brainm
 
 - Writes one folder per case and `../my_runs/cohort/files.xlsx`.
 - Without `-f True`: skull stripping and bias correction with FSL (BET + FAST), as MicrobleedNet.
-- FLAIR (`-flr`, same session): BET, FAST, then onto the T2* by the scanner coordinates (`--flair_registered True` if it is already).
+- FLAIR (`-flr`, same session): BET, FAST (FSL, also with `-f True`), then onto the T2* by the scanner coordinates
+  (`--flair_registered True` if it is already: no FSL).
 - `--synthseg True` adds the tissue map (FreeSurfer; from the FLAIR when there is one). `-mod swi` names the scan `_swi`.
 - `--microbleednet_inputs True` adds `images/` + `frsts/` with MicrobleedNet's own code (installed separately),
   `--inpaint True` also `images_inpainted/` + `frsts_inpainted/`. Without them, `cmbx train -i ../my_runs/cohort`
@@ -163,4 +164,5 @@ Details and sources: [docs/DETAILS.md](docs/DETAILS.md#differences-to-microbleed
 
 <sub>**Hardware:** NVIDIA or AMD GPU with 2 GB or more (CPU works, slowly); 32 GB RAM for training; only the GPU driver,
 no CUDA toolkit. **Software:** Linux or macOS; conda or Python 3.10+ (set up by `install.sh`); FSL for
-`cmbx preprocess` without `-f True`; FreeSurfer 7.3+ for `--synthseg True`.</sub>
+`cmbx preprocess` without `-f True`, and for a FLAIR (`-flr`) also with it unless `--flair_registered True`;
+FreeSurfer 7.3+ for `--synthseg True`.</sub>

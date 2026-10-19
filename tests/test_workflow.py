@@ -154,7 +154,7 @@ def test_train_evaluate_fine_tune(cohort):
     main(["fine_tune", "-i", train, "-l", train, "-m", m, "-o", ft, "--config", CFG, "-ep", "1", "-ftlayers", "1"])
     import yaml
     c = yaml.safe_load(open(os.path.join(ft, "config.yaml")))
-    assert c["train"]["lr"] == 0.0001 and c["train"]["init_from"] == m and c["train"]["channels"] == ["image", "frst", "flair"]
+    assert c["train"]["lr"] == 0.0001 and c["train"]["init_from"] == m and c["train"]["channels"] == ["image", "frst_mbnet", "flair"]
 
 
 def test_cross_validate(cohort):
@@ -233,3 +233,86 @@ def test_relative_paths_as_in_the_readme(tmp_path, monkeypatch):
     main(["train", "-i", "train/derivatives", "-l", "train/derivatives/preprocessed", "-m", "runs/m", "--config", CFG, "-ep", "1"])
     main(["evaluate", "-i", "new/derivatives", "-m", "runs/m", "-o", "runs/pred"])
     assert len(os.listdir("runs/pred/final_predictions")) == 2
+
+
+def test_cohort_and_derivatives_get_the_same_frst(tmp_path):
+    """-i <cohort> and -i <cohort>/derivatives read the same MicrobleedNet FRST (frsts/, frsts_inpainted/ with --inpaint):
+    the same data must not train a different model depending on which of the two folders is given."""
+    root = write_phantom_preprocessed(str(tmp_path / "c"), 2, 0)
+    der = os.path.join(root, "derivatives")
+    import shutil
+    shutil.copytree(os.path.join(der, "images"), os.path.join(der, "images_inpainted"))
+    shutil.copytree(os.path.join(der, "frsts"), os.path.join(der, "frsts_inpainted"))
+    for inpaint, sub in ((False, "frsts"), (True, "frsts_inpainted")):
+        a = collect(root, need_labels=True, inpaint=inpaint, log=QUIET)
+        b = collect(der, os.path.join(der, "preprocessed"), need_labels=True, inpaint=inpaint, log=QUIET)
+        assert [r["frst_file"] for r in a] == [r["frst_file"] for r in b]
+        assert all(f"/{sub}/" in r["frst_file"] for r in a)
+
+
+def test_every_n_checkpoint_before_the_first_evaluation(cohort):
+    """-cp_type everyN saves a state before the held-out cases were first evaluated (-cp_n below eval_every): it carries
+    the default cell instead of crashing."""
+    tmp, train, _ = cohort
+    m = str(tmp / "every_n")
+    main(["train", "-i", train, "-l", train, "-m", m, "--config", CFG, "-ep", "2", "-cp_type", "everyN", "-cp_n", "1",
+          "--frst", "False", "--set", "train.eval_every=2"])
+    import torch
+    meta = torch.load(os.path.join(m, "final", "model_epoch1.pt"), map_location="cpu", weights_only=False)["meta"]
+    assert (meta["epoch"], meta["threshold"], meta["min_size"]) == (1, 0.5, 2)
+
+
+def test_interrupted_overwrite_does_not_keep_the_old_model(cohort, monkeypatch):
+    """train --overwrite True with other settings writes the new config.yaml first: if that training stops early, the
+    folder must not still look like a finished model of the new settings (it would be skipped as 'final model exists')."""
+    tmp, train, _ = cohort
+    m = str(tmp / "overwrite")
+    base = ["train", "-i", train, "-l", train, "-m", m, "--config", CFG, "--frst", "False"]
+    main(base + ["-ep", "1"])
+    import cmbx.final
+
+    def stop(*a, **k):
+        raise KeyboardInterrupt
+    monkeypatch.setattr(cmbx.final, "train_final", stop)
+    with pytest.raises(KeyboardInterrupt):
+        main(base + ["-ep", "2", "--overwrite", "True"])
+    monkeypatch.undo()
+    assert not os.path.exists(os.path.join(m, "final", "meta.json")) and glob.glob(os.path.join(m, "final", "meta.json.superseded-*"))
+    main(base + ["-ep", "2"])
+    import json
+    assert json.load(open(os.path.join(m, "final", "meta.json")))["epochs_run"] == 2
+
+
+def test_config_file_keys_are_kept(cohort):
+    """train.train_prop and (for fine_tune) train.lr written in the --config YAML or given with --set are kept; the
+    MicrobleedNet values 0.8 and 0.0001 only stand in when nobody set them."""
+    import yaml
+    tmp, train, _ = cohort
+    c = yaml.safe_load(open(CFG))
+    c["train"].update(train_prop=0.7, lr=0.002)
+    own = str(tmp / "own.yaml")
+    yaml.safe_dump(c, open(own, "w"))
+    m, ft, ft2 = str(tmp / "own_m"), str(tmp / "own_ft"), str(tmp / "own_ft2")
+    main(["train", "-i", train, "-l", train, "-m", m, "--config", own, "-ep", "1", "--frst", "False"])
+    main(["fine_tune", "-i", train, "-l", train, "-m", m, "-o", ft, "--config", own, "-ep", "1"])
+    main(["fine_tune", "-i", train, "-l", train, "-m", m, "-o", ft2, "--config", CFG, "-ep", "1", "--set", "train.lr=0.003"])
+    got = [yaml.safe_load(open(os.path.join(d, "config.yaml")))["train"] for d in (m, ft, ft2)]
+    assert [g["train_prop"] for g in got] == [0.7, 0.7, 0.8] and [g["lr"] for g in got] == [0.002, 0.002, 0.003]
+
+
+def test_fine_tune_keeps_the_network_and_grid_of_the_start_model(cohort):
+    """fine_tune builds the network of the start model (width), cuts its patch and resamples to its grid, unless the
+    user sets them: a model trained with its own --config can be fine-tuned without that file."""
+    import yaml
+    tmp, train, _ = cohort
+    m, ft = str(tmp / "grid_m"), str(tmp / "grid_ft")
+    main(["train", "-i", train, "-l", train, "-m", m, "--config", CFG, "-ep", "1", "--frst", "False",
+          "--set", "preprocess.spacing=[1.0,1.0,2.0]"])
+    c = yaml.safe_load(open(CFG))
+    del c["model"], c["train"]["patch_size"]
+    lean = str(tmp / "lean.yaml")
+    yaml.safe_dump(c, open(lean, "w"))
+    main(["fine_tune", "-i", train, "-l", train, "-m", m, "-o", ft, "--config", lean, "-ep", "1"])
+    got = yaml.safe_load(open(os.path.join(ft, "config.yaml")))
+    assert got["model"]["base_channels"] == 8 and got["train"]["patch_size"] == [16, 32, 32]
+    assert got["preprocess"]["spacing"] == [1.0, 1.0, 2.0]

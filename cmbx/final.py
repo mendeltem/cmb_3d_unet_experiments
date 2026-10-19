@@ -164,7 +164,7 @@ def train_final(cfg: Dict, run_dir: str, log=print, overwrite: bool = False) -> 
             log(f"[final] ep {ep:3d} loss {row['loss']:.3f}  [{time.time() - t0:.0f} s]")
         history.append(row)
         if ckpt == "everyN" and ep % every == 0:
-            c = last_eval or dict(threshold=cell[0], min_size=cell[1])
+            c = last_eval or dict(zip(("threshold", "min_size"), cell or DEFAULT_CELL))   # before the first held-out evaluation
             torch.save({"state_dict": _state(model), "meta": dict(epoch=ep, threshold=c["threshold"], min_size=c["min_size"])},
                        os.path.join(out, f"model_epoch{ep}.pt"))
         if T.get("resume"):
