@@ -134,6 +134,31 @@ cmbx cross_validate -i examples/train/derivatives -l examples/train/derivatives/
 - Lesion-level F1 out of fold: `../my_runs/cv/summary.json`. Same folds for every setting you compare.
 - Five trainings of 60 epochs: about 1 h on one GPU even for the examples; `-ep 2` for a quick try.
 
+## From Python
+
+The same steps as plain Python scripts, written out one by one so that you can read and change each: the cases onto the
+model grid, patches, loss, optimizer, the threshold chosen on held-out cases, the masks back on the scan.
+
+```bash
+python examples/python/01_train_unet.py -i examples/train/derivatives/preprocessed -m ../my_runs/py_model --epochs 5
+```
+
+```bash
+python examples/python/02_predict_microbleeds.py -i examples/new/derivatives/preprocessed -m ../my_runs/py_model -o ../my_runs/py_pred
+```
+
+```bash
+python examples/python/03_fine_tune_unet.py -i examples/train/derivatives/preprocessed -m pretrained -o ../my_runs/py_finetuned --epochs 5
+```
+
+- `01_train_unet.py` = `cmbx train --frst_from cmbx`, `02_predict_microbleeds.py` = `cmbx evaluate`, `03_fine_tune_unet.py` =
+  `cmbx fine_tune --frst_from cmbx`: same weights and masks with the same settings (`tests/test_python_examples.py`).
+- Default 60 epochs; `--epochs 5` above is a quick try. Other settings: `--config` with a cmbx YAML (docs/DETAILS.md).
+- `02_predict_microbleeds.py` writes `<case>_cmb.nii.gz` on the scan's own grid, `microbleeds.csv` (one row per
+  microbleed) and `predictions.csv` (one row per case). `-m pretrained` uses the pretrained VALDO model.
+- `03_fine_tune_unet.py` keeps the network, input channels and grid of the start model; learning rate 0.0001;
+  `--levels 1 2` trains only the two levels next to the output.
+
 ## Differences to MicrobleedNet
 
 | | MicrobleedNet (Sundaresan 2023) | cmbx | effect on VALDO (lesion F1) |
