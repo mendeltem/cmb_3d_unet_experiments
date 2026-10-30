@@ -159,6 +159,30 @@ python examples/python/03_fine_tune_unet.py -i examples/train/derivatives/prepro
 - `03_fine_tune_unet.py` keeps the network, input channels and grid of the start model; learning rate 0.0001;
   `--levels 1 2` trains only the two levels next to the output.
 
+## With a settings file
+
+Three scripts that read every setting from one file and choose the cases for you: which folds train, how many scans,
+from scratch or from the pretrained model. They call the numbered scripts above.
+
+```bash
+cp examples/env/.env.example examples/env/.env        # then set CMB_DATA to your cohort folder (README "Data")
+python examples/env/run_predict.py                                   # the pretrained VALDO model as it is
+python examples/env/run_train.py     --set TEST_FOLD=0 N_SCANS=10    # from scratch on 10 scans of the other folds
+python examples/env/run_fine_tune.py --set TEST_FOLD=0 N_SCANS=10    # the pretrained model on the same 10 scans
+python examples/env/run_predict.py   --set MODEL=../my_runs/<cohort>/finetune_valdo_not_fold0_n10_seed0 TEST_FOLD=0
+```
+
+- `TEST_FOLD=k` trains on the other folds and predicts only fold k. Folds come from `participants.tsv` (column `fold`)
+  or are drawn once, stratified by the number of microbleeds, and kept in `<CMB_RUNS>/<cohort>/_input/folds.tsv`.
+- `N_SCANS=n` takes n of the training scans, stratified by the number of microbleeds; with the same `DRAW_SEED` the
+  draws are nested (the 5 scans are part of the 10). Train and fine-tune with the same settings to compare "from scratch"
+  with "from the pretrained model" on the same scans.
+- `run_predict.py` compares with the reference masks where they exist: `comparison_summary.json` (lesion F1,
+  precision, recall, false positives per scan, Spearman of the counts, agreement on "more than 4 microbleeds") and
+  `comparison_per_case.csv`.
+- Each output folder has `run_settings.json`; a finished output is skipped unless `--force true`. Every key with its
+  default: `examples/env/cmb_env.py`. Tests: `tests/test_env_examples.py`.
+
 ## Differences to MicrobleedNet
 
 | | MicrobleedNet (Sundaresan 2023) | cmbx | effect on VALDO (lesion F1) |

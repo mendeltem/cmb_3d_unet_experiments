@@ -22,3 +22,6 @@ env.sh
 models/
 pred/
 my_runs/
+
+# your own settings for examples/env (paths to your data): never commit
+examples/env/.env
