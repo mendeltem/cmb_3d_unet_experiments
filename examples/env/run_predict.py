@@ -3,7 +3,7 @@
     cp examples/env/.env.example examples/env/.env      # once; then set CMB_DATA and the rest (keys: cmb_env.py)
     python examples/env/run_predict.py                                 # MODEL=pretrained: the public VALDO model as it is
     python examples/env/run_predict.py --set MODEL=../my_runs/my_cohort/finetune_valdo_not_fold0 TEST_FOLD=0 --force true
-On the HPC: sbatch -p gpu --gres=shard:1 --mem=32G --time=02:00:00 --wrap "source env.sh && python examples/env/run_predict.py"
+On the HPC: sbatch -p gpu --gres=shard:1 --mem=32G --time=02:00:00 --wrap "source ./env.sh && python examples/env/run_predict.py"
 With TEST_FOLD=k only the cases of fold k are predicted (the ones a model trained with the same TEST_FOLD never saw).
 
 Steps (each prints what it does):

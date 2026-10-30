@@ -2,7 +2,7 @@
 
     python examples/env/run_train.py                                   # CMB_DATA, TEST_FOLD, N_SCANS ... from examples/env/.env
     python examples/env/run_train.py --set TEST_FOLD=0 N_SCANS=10
-On the HPC: sbatch -p gpu --gres=shard:1 --mem=32G --time=04:00:00 --wrap "source env.sh && python examples/env/run_train.py"
+On the HPC: sbatch -p gpu --gres=shard:1 --mem=32G --time=04:00:00 --wrap "source ./env.sh && python examples/env/run_train.py"
 
 Steps:
   1 settings; which cases train (all, or all but TEST_FOLD; N_SCANS of them, stratified by microbleed count)

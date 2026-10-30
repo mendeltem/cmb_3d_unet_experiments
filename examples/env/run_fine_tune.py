@@ -2,7 +2,7 @@
 
     python examples/env/run_fine_tune.py                               # START_MODEL=pretrained, CMB_DATA, TEST_FOLD, N_SCANS ... from examples/env/.env
     python examples/env/run_fine_tune.py --set TEST_FOLD=0 N_SCANS=10
-On the HPC: sbatch -p gpu --gres=shard:1 --mem=32G --time=04:00:00 --wrap "source env.sh && python examples/env/run_fine_tune.py"
+On the HPC: sbatch -p gpu --gres=shard:1 --mem=32G --time=04:00:00 --wrap "source ./env.sh && python examples/env/run_fine_tune.py"
 
 Steps:
   1 settings; which cases train (as in run_train.py)
