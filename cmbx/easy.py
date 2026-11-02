@@ -114,6 +114,6 @@ def _cmbx(command, args, options):
             continue
         values = value if isinstance(value, (list, tuple)) else [value]
         words += [f"--{name}"] + [str(v) for v in values]
-    print("$ cmbx " + " ".join(words[4:]), flush=True)
+    print("$ cmbx " + " ".join(words[3:]), flush=True)
     if subprocess.run(words).returncode != 0:
         raise RuntimeError(f"cmbx {command} failed (see the messages above)")

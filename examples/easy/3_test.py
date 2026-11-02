@@ -3,12 +3,13 @@
     python examples/easy/3_test.py                 # the pretrained VALDO model
     python examples/easy/3_test.py ../my_runs/easy/model_scratch     # or any model folder
 """
+import os
 import sys
 from cmbx import easy
 
 TEST = "../my_runs/easy/data/test"
 MODEL = sys.argv[1] if len(sys.argv) > 1 else "pre"      # "pre" = the pretrained model that comes with cmbx
-OUT = "../my_runs/easy/predictions"
+OUT = "../my_runs/easy/predictions_" + os.path.basename(MODEL.rstrip("/"))   # one folder per model
 
 easy.predict(TEST, MODEL, OUT)
 

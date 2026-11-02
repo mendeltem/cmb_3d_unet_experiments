@@ -9,6 +9,8 @@ python examples/easy/3_test.py             # test the pretrained model (or: 3_te
 python examples/easy/4_fine_tune.py        # fine-tune the pretrained model and test it
 ```
 
+Or all of them in one go: `python examples/easy/run_all.py` (stops at the first failing step; finished steps are reused).
+
 Each script is a few lines that call `cmbx.easy`:
 
 | function | what it does |

@@ -1,5 +1,5 @@
 """
-test_all_cases.py -- run every experiment of this repository on five real example scans and write a PDF report.
+test_all_cases.py -- run every experiment of this repository on five real example scans and write a report (PNG images + CSV).
 
 HOW TO RUN
 
@@ -15,7 +15,8 @@ WHAT IT DOES
     2. Split        three cases for training, two for testing (see TRAIN_CASES and TEST_CASES below)
     3. Experiments  each experiment is a short list of `cmbx` commands -- the same commands you would type yourself
     4. Score        every experiment on the same test cases: TP, FP, FN, sensitivity, precision, lesion F1
-    5. Report       <out>/report/summary.pdf, one PDF per test case, and results.csv
+    5. Report       <out>/report/summary_1.png (table), summary_2.png (F1 chart), <case>_1.png ... per test case,
+                    and results.csv
 
     test.py is the QUICK check that every function works. This script runs whole experiments, start to end.
 
@@ -218,15 +219,31 @@ def as_text(number):
 
 
 # ======================================================================================================================
-# THE REPORT (PDF + CSV)
+# THE REPORT (PNG images + CSV; images are always PNG, never PDF)
 # ======================================================================================================================
 
-def write_summary_pdf(results, settings, pdf_file):
+class PngPages:
+    """Collects report pages like a PDF would, but writes each page as its own PNG: <prefix>_1.png, <prefix>_2.png ..."""
+
+    def __init__(self, prefix):
+        self.prefix, self.pages = prefix, 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *error):
+        return False
+
+    def savefig(self, fig):
+        self.pages += 1
+        fig.savefig(f"{self.prefix}_{self.pages}.png", dpi=150, facecolor="white")
+
+
+def write_summary_pages(results, settings, prefix):
     """Page 1: a table of all experiments. Page 2: a bar chart of lesion F1."""
     import matplotlib.pyplot as plt
-    from matplotlib.backends.backend_pdf import PdfPages
 
-    with PdfPages(pdf_file) as pdf:
+    with PngPages(prefix) as pages:
         # ---- page 1: table
         fig = plt.figure(figsize=(11.7, 8.3))      # A4 landscape
         fig.text(0.04, 0.95, "test_all_cases.py -- all experiments on the VALDO examples", fontsize=15, weight="bold")
@@ -264,7 +281,7 @@ def write_summary_pdf(results, settings, pdf_file):
             explanations.append(line)
         fig.text(0.04, 0.29, "Experiments", weight="bold", fontsize=9)
         fig.text(0.04, 0.03, "\n".join(explanations), fontsize=7.5, va="bottom", family="monospace")
-        pdf.savefig(fig)
+        pages.savefig(fig)
         plt.close(fig)
 
         # ---- page 2: bar chart of lesion F1
@@ -275,22 +292,22 @@ def write_summary_pdf(results, settings, pdf_file):
             f1_values = [r.get("f1") or 0 for r in scored]
             false_positives = [r.get("fp") or 0 for r in scored]
             ax.barh(names, f1_values, color="#2c7fb8")
-            ax.set_xlim(0, 1)
+            ax.set_xlim(0, 1.25)                              # room for the labels right of the bars
+            ax.set_xticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
             ax.set_xlabel("lesion F1 (pooled over the test cases)")
             for i, (f1, fp) in enumerate(zip(f1_values, false_positives)):
-                ax.text(min(f1 + 0.01, 0.9), i, f"F1 {f1:.2f}, {fp} FP", va="center", fontsize=8)
+                ax.text(f1 + 0.02, i, f"F1 {f1:.2f}, {fp} FP", va="center", fontsize=8)   # always next to the bar
             ax.invert_yaxis()
             ax.set_title("Lesion F1 per experiment (few epochs: shows that it runs, not how good it is)")
             fig.tight_layout()
-            pdf.savefig(fig)
+            pages.savefig(fig)
             plt.close(fig)
 
 
-def write_case_pdf(case, results, case_folder, pdf_file):
+def write_case_pages(case, results, case_folder, prefix):
     """One test case: a table of all experiments, then the slice with the most microbleeds,
     with rings: green = found, orange = false alarm, blue = missed."""
     import matplotlib.pyplot as plt
-    from matplotlib.backends.backend_pdf import PdfPages
     import nibabel as nib
     import numpy as np
     from scipy import ndimage
@@ -326,7 +343,7 @@ def write_case_pdf(case, results, case_folder, pdf_file):
         draw_rings(ax, np.rot90(false_alarm[:, :, z]), "#ff7f0e")    # orange
         draw_rings(ax, np.rot90(missed[:, :, z]), "#1f77b4")         # blue
 
-    with PdfPages(pdf_file) as pdf:
+    with PngPages(prefix) as pages:
         # ---- page 1: table
         fig = plt.figure(figsize=(11.7, 8.3))
         fig.text(0.04, 0.95, f"{case}: {n_reference} reference microbleed(s)", fontsize=15, weight="bold")
@@ -346,7 +363,7 @@ def write_case_pdf(case, results, case_folder, pdf_file):
         fig.text(0.04, 0.05, "TP = reference microbleeds touched by a prediction; FP = predicted spots touching none; "
                              "FN = reference microbleeds missed.\nA case without microbleeds has no sensitivity or F1 (n/a); "
                              "its FP count is the number of false alarms.", fontsize=8)
-        pdf.savefig(fig)
+        pages.savefig(fig)
         plt.close(fig)
 
         # ---- next pages: images, four experiments per page next to the reference
@@ -361,7 +378,7 @@ def write_case_pdf(case, results, case_folder, pdf_file):
                 show_slice(ax, r["name"], predicted)
             fig.suptitle("green = found, orange = false alarm, blue = missed (this slice)", fontsize=9)
             fig.tight_layout()
-            pdf.savefig(fig)
+            pages.savefig(fig)
             plt.close(fig)
 
 
@@ -386,9 +403,9 @@ def write_report(results, settings, case_folder):
     matplotlib.use("Agg")                                   # draw into files, no window needed
     report_folder = os.path.join(settings.out, "report")
     os.makedirs(report_folder, exist_ok=True)
-    write_summary_pdf(results, settings, os.path.join(report_folder, "summary.pdf"))
+    write_summary_pages(results, settings, os.path.join(report_folder, "summary"))
     for case in TEST_CASES:
-        write_case_pdf(case, results, case_folder, os.path.join(report_folder, f"{case}.pdf"))
+        write_case_pages(case, results, case_folder, os.path.join(report_folder, case))
     write_csv(results, os.path.join(report_folder, "results.csv"))
     return report_folder
 
@@ -512,7 +529,7 @@ def main():
         print(line + f"  ({result['seconds'] / 60:.1f} min)", flush=True)
 
     report_folder = write_report(results, settings, test_folder)
-    print(f"report: {report_folder}/summary.pdf, one PDF per test case ({', '.join(TEST_CASES)}), {report_folder}/results.csv")
+    print(f"report: {report_folder}/summary_1.png and _2.png, <case>_N.png per test case ({', '.join(TEST_CASES)}), {report_folder}/results.csv")
 
     failed = [r["name"] for r in results if r["status"].startswith("FAILED")]
     print("ALL EXPERIMENTS RAN" if not failed else f"FAILED: {failed}")

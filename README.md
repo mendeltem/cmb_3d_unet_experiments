@@ -143,6 +143,7 @@ python examples/easy/1_prepare_data.py     # the five VALDO example scans -> tra
 python examples/easy/2_train.py            # train a model from scratch
 python examples/easy/3_test.py             # test the pretrained model (or: 3_test.py <model folder>)
 python examples/easy/4_fine_tune.py        # fine-tune the pretrained model and test it
+python examples/easy/run_all.py            # or all four in one go
 ```
 
 ## Test every experiment on example data
@@ -151,7 +152,7 @@ python examples/easy/4_fine_tune.py        # fine-tune the pretrained model and 
 `examples/valdo/README.md`). `test_all_cases.py` runs every experiment of this repository on them with the same `cmbx`
 commands: the pretrained model as downloaded, training from scratch with and without FRST, the CSF rule, fine-tuning,
 the step-2 classifier (teacher-student and small CNN), vessel inpainting (only if `microbleednet` is installed) and a
-3-fold cross-validation. Afterwards it writes a PDF report with TP, FP, FN, sensitivity, precision and lesion F1.
+3-fold cross-validation. Afterwards it writes a report (PNG images + CSV) with TP, FP, FN, sensitivity, precision and lesion F1.
 
 ```bash
 ./install.sh && source env.sh                   # once; in every new shell: source env.sh (never the system Python)
@@ -160,7 +161,7 @@ python test_all_cases.py                        # all of them (GPU), results in 
 python test_all_cases.py --device cpu --epochs 2 --only pretrained finetune
 ```
 
-Report: `<out>/report/summary.pdf` (all experiments), `<out>/report/<case>.pdf` (one per test case) and
+Report: `<out>/report/summary_1.png` (table) and `summary_2.png` (F1 chart), `<out>/report/<case>_N.png` (per test case) and
 `<out>/report/results.csv`. With 4 epochs on 3 training cases the numbers show that every path runs, not how good a
 model is. `python test.py` stays the quick check that every function works.
 
