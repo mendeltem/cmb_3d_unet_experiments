@@ -134,24 +134,69 @@ cmbx cross_validate -i examples/train/derivatives -l examples/train/derivatives/
 - Lesion-level F1 out of fold: `../my_runs/cv/summary.json`. Same folds for every setting you compare.
 - Five trainings of 60 epochs: about 1 h on one GPU even for the examples; `-ep 2` for a quick try.
 
+## The easiest way: four short Python scripts
+
+`examples/easy/` trains, tests and fine-tunes in a few lines each, with `cmbx.easy` (see `examples/easy/README.md`):
+
+```bash
+python examples/easy/1_prepare_data.py     # the five VALDO example scans -> train (3) and test (2)
+python examples/easy/2_train.py            # train a model from scratch
+python examples/easy/3_test.py             # test the pretrained model (or: 3_test.py <model folder>)
+python examples/easy/4_fine_tune.py        # fine-tune the pretrained model and test it
+python examples/easy/run_all.py            # or all four in one go
+```
+
 ## Test every experiment on example data
 
 `examples/valdo` holds five real VALDO 2021 T2* scans (four with microbleeds, one without; CC BY-NC-SA 4.0, see
 `examples/valdo/README.md`). `test_all_cases.py` runs every experiment of this repository on them with the same `cmbx`
 commands: the pretrained model as downloaded, training from scratch with and without FRST, the CSF rule, fine-tuning,
 the step-2 classifier (teacher-student and small CNN), vessel inpainting (only if `microbleednet` is installed) and a
-3-fold cross-validation. Afterwards it writes a PDF report with TP, FP, FN, sensitivity, precision and lesion F1.
+3-fold cross-validation. Afterwards it writes a report (PNG images + CSV) with TP, FP, FN, sensitivity, precision and lesion F1.
 
 ```bash
-pip install -e ".[test]"
+./install.sh && source env.sh                   # once; in every new shell: source env.sh (never the system Python)
 python test_all_cases.py --list                 # the experiments
 python test_all_cases.py                        # all of them (GPU), results in ../my_runs/test_all_cases
 python test_all_cases.py --device cpu --epochs 2 --only pretrained finetune
 ```
 
-Report: `<out>/report/summary.pdf` (all experiments), `<out>/report/<case>.pdf` (one per test case) and
+Report: `<out>/report/summary_1.png` (table) and `summary_2.png` (F1 chart), `<out>/report/<case>_N.png` (per test case) and
 `<out>/report/results.csv`. With 4 epochs on 3 training cases the numbers show that every path runs, not how good a
-model is. `python test.py` stays the quick check that every function works.
+model is. The two step-2 experiments start from the fine-tuned pretrained model: a 4-epoch model trained from scratch
+finds no candidates, so step 2 would have nothing to learn from. Started from a Python without `cmbx`, `torch`,
+`nibabel` or `matplotlib` (e.g. the conda base environment), the script stops at once and says which environment to
+activate.
+
+## Testing: three levels
+
+| Command | What it checks | Time (GPU / CPU) |
+|---|---|---|
+| `python test.py` | every function works (environment, networks, 5-fold CV on 10 synthetic phantoms) | 1 min / 1 min |
+| `python examples/easy/run_all.py` | the four short scripts: prepare, train, test, fine-tune on the VALDO examples | ~5 min / ~30 min |
+| `python test_all_cases.py` | every experiment of the repository on the VALDO examples, with a report | ~10 min / ~2 h |
+
+Expected results (4 epochs; 2 test cases with 6 microbleeds in total, checked on an A100 shard and on a CPU):
+
+| Experiment | found | false alarms | F1 |
+|---|---|---|---|
+| pretrained / + CSF rule | 5 of 6 | 1 | 0.83 |
+| finetune / + CSF rule | 6 of 6 | 1 | 0.92 |
+| step 2 teacher-student | 6 of 6 | about 12 | about 0.5 |
+| step 2 CNN | 5 of 6 | about 2 | about 0.8 |
+| scratch (3 variants) | 0-2 of 6 | hundreds to thousands | 0.00 (4 epochs are far too few -- expected) |
+| inpaint | skipped without `microbleednet` | | |
+| cross_validate | ok | | |
+
+On a SLURM cluster (GPU shard; activate the environment inside the job):
+
+```bash
+sbatch -p gpu --gres=shard:1 --cpus-per-task=8 --mem=32G --time=02:00:00 -o test_all_cases_%j.log \
+  --wrap "source ./env.sh && python test_all_cases.py"
+```
+
+`./env.sh` is written by `./install.sh` (sh does not search the current folder, hence the `./`). Without it, activate
+the environment by name: `--wrap "source <conda>/etc/profile.d/conda.sh && conda activate cmbx && python test_all_cases.py"`.
 
 ## From Python
 
