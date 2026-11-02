@@ -498,8 +498,19 @@ def step3_run_one(experiment, finished, settings, test_folder, log_file):
     return result
 
 
+def check_environment():
+    """Stop at once, with a clear message, if the Python that runs this script cannot run cmbx (wrong environment)."""
+    missing = [name for name in ("cmbx", "torch", "nibabel", "matplotlib") if not package_installed(name)]
+    if missing:
+        raise SystemExit(f"This Python ({sys.executable}) is missing: {', '.join(missing)}.\n"
+                         "Activate the cmbx environment first:   source env.sh   (or: conda activate cmbx)\n"
+                         "If it does not exist yet:              ./install.sh")
+
+
 def main():
     settings = read_settings()
+    if not settings.list:
+        check_environment()
     preprocessed_folder = os.path.join(settings.out, "derivatives", "preprocessed")
     train_folder = os.path.join(settings.out, "split", "train")
     experiments = make_experiments(settings, train_folder)
