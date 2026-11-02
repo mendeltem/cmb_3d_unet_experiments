@@ -143,7 +143,7 @@ the step-2 classifier (teacher-student and small CNN), vessel inpainting (only i
 3-fold cross-validation. Afterwards it writes a PDF report with TP, FP, FN, sensitivity, precision and lesion F1.
 
 ```bash
-pip install -e ".[test]"
+./install.sh && source env.sh                   # once; in every new shell: source env.sh (never the system Python)
 python test_all_cases.py --list                 # the experiments
 python test_all_cases.py                        # all of them (GPU), results in ../my_runs/test_all_cases
 python test_all_cases.py --device cpu --epochs 2 --only pretrained finetune
