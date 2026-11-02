@@ -134,6 +134,17 @@ cmbx cross_validate -i examples/train/derivatives -l examples/train/derivatives/
 - Lesion-level F1 out of fold: `../my_runs/cv/summary.json`. Same folds for every setting you compare.
 - Five trainings of 60 epochs: about 1 h on one GPU even for the examples; `-ep 2` for a quick try.
 
+## The easiest way: four short Python scripts
+
+`examples/easy/` trains, tests and fine-tunes in a few lines each, with `cmbx.easy` (see `examples/easy/README.md`):
+
+```bash
+python examples/easy/1_prepare_data.py     # the five VALDO example scans -> train (3) and test (2)
+python examples/easy/2_train.py            # train a model from scratch
+python examples/easy/3_test.py             # test the pretrained model (or: 3_test.py <model folder>)
+python examples/easy/4_fine_tune.py        # fine-tune the pretrained model and test it
+```
+
 ## Test every experiment on example data
 
 `examples/valdo` holds five real VALDO 2021 T2* scans (four with microbleeds, one without; CC BY-NC-SA 4.0, see
