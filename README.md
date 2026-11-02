@@ -134,6 +134,25 @@ cmbx cross_validate -i examples/train/derivatives -l examples/train/derivatives/
 - Lesion-level F1 out of fold: `../my_runs/cv/summary.json`. Same folds for every setting you compare.
 - Five trainings of 60 epochs: about 1 h on one GPU even for the examples; `-ep 2` for a quick try.
 
+## Test every experiment on example data
+
+`examples/valdo` holds five real VALDO 2021 T2* scans (four with microbleeds, one without; CC BY-NC-SA 4.0, see
+`examples/valdo/README.md`). `test_all_cases.py` runs every experiment of this repository on them with the same `cmbx`
+commands: the pretrained model as downloaded, training from scratch with and without FRST, the CSF rule, fine-tuning,
+the step-2 classifier (teacher-student and small CNN), vessel inpainting (only if `microbleednet` is installed) and a
+3-fold cross-validation. Afterwards it writes a PDF report with TP, FP, FN, sensitivity, precision and lesion F1.
+
+```bash
+pip install -e ".[test]"
+python test_all_cases.py --list                 # the experiments
+python test_all_cases.py                        # all of them (GPU), results in ../my_runs/test_all_cases
+python test_all_cases.py --device cpu --epochs 2 --only pretrained finetune
+```
+
+Report: `<out>/report/summary.pdf` (all experiments), `<out>/report/<case>.pdf` (one per test case) and
+`<out>/report/results.csv`. With 4 epochs on 3 training cases the numbers show that every path runs, not how good a
+model is. `python test.py` stays the quick check that every function works.
+
 ## From Python
 
 The same steps as plain Python scripts, written out one by one so that you can read and change each: the cases onto the

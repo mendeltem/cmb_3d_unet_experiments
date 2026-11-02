@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=7"]
+test = ["pytest>=7", "matplotlib>=3.7"]   # matplotlib: PDF reports of test_all_cases.py
 
 [project.scripts]
 cmbx = "cmbx.cli:main"
