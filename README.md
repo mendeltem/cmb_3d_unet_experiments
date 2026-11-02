@@ -29,6 +29,35 @@ source env.sh
 - Installs Python, PyTorch for your GPU, `cmbx` and the pretrained model. Ends with `ALL REQUIRED CHECKS PASSED`.
 - `source env.sh` in every new shell.
 
+## Quick reference: one line per step (shell and Python)
+
+After `./install.sh` and `source env.sh`, every step is one `cmbx` command. Inputs with `-i`, the model with `-m`,
+outputs with `-o` (as in MicrobleedNet); `cmbx <step> --help` lists all options.
+
+| Step | Shell (one line) | Python (`from cmbx import easy`) |
+|---|---|---|
+| preprocess | `cmbx preprocess -i raw/ -ir _T2starw -l raw/ -lr _cmb.nii.gz -o data/` | `easy.preprocess("raw", "data", scan_ending="_T2starw", masks="raw")` |
+| train | `cmbx train -i data/train -m models/my_model -ep 60` | `easy.train("data/train", "models/my_model", epochs=60)` |
+| fine-tune | `cmbx fine_tune -i data/train -m pre -o models/my_finetuned -ep 30` | `easy.fine_tune("data/train", "models/my_finetuned", start_from="pre", epochs=30)` |
+| predict | `cmbx evaluate -i data/test -m models/my_model -o predictions/` | `easy.predict("data/test", "models/my_model", "predictions")` |
+| score | -- | `easy.score("predictions", "data/test")` (TP, FP, FN, F1 per case) |
+| cross-validate | `cmbx cross_validate -i data/train -o cv/ -fold 5` | `easy.cross_validate("data/train", "cv", folds=5)` |
+| test everything | `./run_tests.sh quick` · `./run_tests.sh easy` · `./run_tests.sh all` | -- |
+
+`-m pre` is the pretrained VALDO model. Any other option works the same way in both: on the shell as a flag
+(`--csf_rule True`), in Python as a keyword (`csf_rule=True`).
+
+**How the two connect.** Each `cmbx.easy` function builds the shell command and runs it, so both give exactly the same
+result. To run any `cmbx` command from your own Python code without `cmbx.easy`:
+
+```python
+import subprocess, sys
+subprocess.run([sys.executable, "-m", "cmbx", "train", "-i", "data/train", "-m", "models/my_model", "-ep", "60"], check=True)
+```
+
+On a SLURM cluster, put the same line into `sbatch --wrap "source ./env.sh && cmbx train -i data/train -m models/my_model"`,
+or test everything with `./run_tests.sh all --slurm`.
+
 ## Data
 
 ```
@@ -169,6 +198,9 @@ finds no candidates, so step 2 would have nothing to learn from. Started from a 
 activate.
 
 ## Testing: three levels
+
+One line for each: `./run_tests.sh quick`, `./run_tests.sh easy`, `./run_tests.sh all` (or `everything`); add
+`--slurm` to submit it as a GPU job. The script activates the environment itself and writes a log to `test_logs/`.
 
 | Command | What it checks | Time (GPU / CPU) |
 |---|---|---|
