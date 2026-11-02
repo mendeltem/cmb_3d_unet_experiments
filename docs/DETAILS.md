@@ -505,7 +505,8 @@ The VALDO numbers come from a different dataset (public, 3 sites) and are not a 
   other tournament networks.
 
 ## License and citation
-Code: MIT (`LICENSE`), as cmb-valdo-chain. Data and weights are not part of the repository; VALDO is CC BY-NC-SA 4.0
+Code: MIT (`LICENSE`), as cmb-valdo-chain. The only data in the repository are five VALDO example scans in `examples/valdo`
+(own LICENSE and attribution, see its README) and synthetic phantoms; VALDO is CC BY-NC-SA 4.0
 (cite Sudre et al. 2024, Medical Image Analysis, doi:10.1016/j.media.2023.103029); in-house data never leave the
 clinic. If you use this code, cite cmb-valdo-chain (mendeltem, 2026, https://github.com/mendeltem/cmb-valdo-chain) and
 for the FRST Loy & Zelinsky 2003 (IEEE TPAMI 25(8):959-973, doi:10.1109/TPAMI.2003.1217601); the starting point of
