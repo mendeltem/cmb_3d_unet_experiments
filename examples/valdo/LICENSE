@@ -1,0 +1,8 @@
+The files in examples/valdo/raw/ are five scans of the VALDO 2021 challenge training data (Task 2, cerebral microbleeds),
+doi:10.5281/zenodo.4520773, unchanged except for the file names.
+
+They are licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International licence
+(CC BY-NC-SA 4.0): https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
+
+Attribution and the citations requested by the data owners: see examples/valdo/README.md.
+The MIT licence of this repository's code does not cover these files.

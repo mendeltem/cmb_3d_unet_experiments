@@ -1,7 +1,55 @@
 """Writes docs/architecture.svg: the pipeline drawn in the style of MicrobleedNet's Figure 2 (Sundaresan et al. 2023):
 step 1 candidate detection (3D U-Net), step 2 candidate discrimination (teacher-student), with the feature-map sizes of
-this package (cmbx/model.py, cmbx/stage2.py). Run: python scripts/make_architecture_figure.py"""
-import os
+this package (cmbx/model.py, cmbx/stage2.py). Run: python scripts/make_architecture_figure.py
+The image tiles are real: VALDO 2021 case sub-103 from examples/valdo (CC BY-NC-SA 4.0, see examples/valdo/README.md),
+its axial slice with the most reference microbleeds, the FRST map of that slice (cmbx.frst on the inverted image) and
+crops around its microbleeds; without examples/valdo the tiles fall back to drawn placeholders."""
+import base64, io, os
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def valdo_tiles(case="sub-103"):
+    """PNG tiles (base64) from a real VALDO scan: slice, FRST of the slice, one CMB crop, six candidate crops."""
+    raw = os.path.join(REPO, "examples", "valdo", "raw")
+    try:
+        import numpy as np, nibabel as nib
+        import matplotlib; matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from cmbx.frst import frst_slice
+        img = np.asarray(nib.load(f"{raw}/{case}_T2starw.nii.gz").dataobj, dtype=np.float32)
+        cmb = np.asarray(nib.load(f"{raw}/{case}_cmb.nii.gz").dataobj) > 0
+    except Exception as e:  # noqa: BLE001  (figure still builds without the data)
+        print("no VALDO tiles:", e)
+        return None
+    z = int(np.argmax(cmb.sum(axis=(0, 1))))
+    sl = np.rot90(img[:, :, z]); lab = np.rot90(cmb[:, :, z])
+    ys, xs = np.nonzero(sl > 0); y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
+    side = max(y1 - y0, x1 - x0) // 2 + 6; cy, cx = (y0 + y1) // 2, (x0 + x1) // 2
+    box = lambda a: a[max(cy - side, 0):cy + side, max(cx - side, 0):cx + side]
+    lo, hi = np.percentile(sl[sl > 0], [1, 99.5])
+    norm = lambda a: np.clip((a - lo) / (hi - lo + 1e-6), 0, 1)
+    inv = np.where(sl > 0, 1 - sl / (sl.max() + 1e-6), 0)
+    fr = frst_slice(inv); fr = fr / (np.percentile(fr[sl > 0], 99.7) + 1e-9)
+
+    def png(a, px):
+        f = plt.figure(figsize=(px / 100, px / 100), dpi=100); ax = f.add_axes([0, 0, 1, 1]); ax.axis("off")
+        ax.imshow(a, cmap="gray", vmin=0, vmax=1, interpolation="lanczos")
+        b = io.BytesIO(); f.savefig(b, format="png"); plt.close(f)
+        return base64.b64encode(b.getvalue()).decode()
+
+    from scipy import ndimage
+    cl, n = ndimage.label(lab); centres = [tuple(int(v) for v in c) for c in ndimage.center_of_mass(lab, cl, range(1, n + 1))]
+    h = 16                                                       # 32 x 32 in-plane crop, as the classifier sees it
+    crop = lambda c: norm(sl)[max(c[0] - h, 0):c[0] + h, max(c[1] - h, 0):c[1] + h]
+    rng = np.random.RandomState(0); brain = np.argwhere(sl > np.percentile(sl[sl > 0], 30))
+    others = [tuple(brain[i]) for i in rng.choice(len(brain), 6, replace=False)]
+    cands = (centres + others)[:6]
+    return dict(slice=png(norm(box(sl)), 184), frst=png(np.clip(box(fr), 0, 1), 184),
+                crop=png(crop(centres[0]), 184) if centres else None, cands=[png(crop(c), 48) for c in cands])
+
+
+TILES = valdo_tiles()
 
 W, H = 1180, 1010
 out = []
@@ -37,11 +85,14 @@ def frame(x, y, w, h, title):
     text(x + w / 2, y - 12, title, 19, 700, anchor="middle")
 
 
-def volume(x, y, label, sub, grid=True):
+def volume(x, y, label, sub, grid=True, tile=None):
     """The input volume with the patch grid, as in MicrobleedNet's figure."""
     add(f'<rect x="{x}" y="{y}" width="92" height="92" rx="3" fill="#1e293b"/>')
-    add(f'<ellipse cx="{x + 46}" cy="{y + 46}" rx="34" ry="40" fill="#94a3b8" opacity="0.85"/>')
-    add(f'<ellipse cx="{x + 46}" cy="{y + 46}" rx="20" ry="25" fill="#cbd5e1" opacity="0.8"/>')
+    if tile:
+        add(f'<image x="{x}" y="{y}" width="92" height="92" href="data:image/png;base64,{tile}"/>')
+    else:
+        add(f'<ellipse cx="{x + 46}" cy="{y + 46}" rx="34" ry="40" fill="#94a3b8" opacity="0.85"/>')
+        add(f'<ellipse cx="{x + 46}" cy="{y + 46}" rx="20" ry="25" fill="#cbd5e1" opacity="0.8"/>')
     if grid:
         for k in range(1, 4):
             add(f'<line x1="{x + 23 * k}" y1="{y}" x2="{x + 23 * k}" y2="{y + 92}" stroke="#fbbf24" stroke-width="0.8" stroke-dasharray="3 2"/>')
@@ -71,8 +122,8 @@ for i, (a, b) in enumerate(steps):
 
 # ---------------- step 1
 frame(20, 175, W - 40, 330, "Step 1: 3D CMB candidate detection network (anisotropic 3D U-Net)")
-volume(40, 245, "patches 38 x 62 x 94", "(z, y, x) of the volume")
-volume(40, 372, "the same patches", "of the FRST map")
+volume(40, 245, "patches 38 x 62 x 94", "(z, y, x) of the volume", tile=TILES and TILES["slice"])
+volume(40, 372, "the same patches", "of the FRST map", tile=TILES and TILES["frst"])
 text(150, 236, "in: 40x64x96 x 2 (image + FRST)", 10.5, family="Menlo, Consolas, monospace")
 arrow(140, 300, 196, 330)
 arrow(140, 410, 196, 380)
@@ -120,7 +171,7 @@ text(1070, 445, "CSF rule: --csf_rule", 11, fill=MUTED, anchor="middle")
 frame(20, 550, W - 40, 440, "Step 2 (optional, -cand_disc True): candidate discrimination, teacher-student as in MicrobleedNet")
 add(f'<rect x="40" y="572" width="1100" height="190" rx="10" fill="#f8fafc" stroke="{LINE}"/>')
 text(56, 594, "TEACHER NETWORK", 14, 700)
-volume(56, 610, "16 x 32 x 32 crop", "around each candidate", grid=False)
+volume(56, 610, "16 x 32 x 32 crop", "around each candidate", grid=False, tile=TILES and TILES["crop"])
 text(56, 752, "image + FRST", 11, fill=MUTED)
 # Tf
 add(f'<rect x="185" y="600" width="330" height="150" rx="10" fill="none" stroke="#eab308" stroke-width="1.6"/>')
@@ -168,7 +219,10 @@ add(f'<rect x="40" y="835" width="1100" height="140" rx="10" fill="#f8fafc" stro
 text(56, 857, "STUDENT NETWORK (applied to new candidates)", 14, 700)
 for i in range(6):
     add(f'<rect x="{60 + (i % 3) * 30}" y="{870 + (i // 3) * 30}" width="24" height="24" rx="2" fill="#1e293b"/>')
-    add(f'<circle cx="{72 + (i % 3) * 30}" cy="{882 + (i // 3) * 30}" r="4" fill="#cbd5e1"/>')
+    if TILES:
+        add(f'<image x="{60 + (i % 3) * 30}" y="{870 + (i // 3) * 30}" width="24" height="24" href="data:image/png;base64,{TILES["cands"][i]}"/>')
+    else:
+        add(f'<circle cx="{72 + (i % 3) * 30}" cy="{882 + (i // 3) * 30}" r="4" fill="#cbd5e1"/>')
 text(105, 948, "crops of the candidates", 11, fill=MUTED, anchor="middle")
 x = 200
 for i, (s, w, h) in enumerate(tf + tc):
@@ -185,6 +239,7 @@ text(x + 210, 917, "score threshold chosen out of fold", 11, fill=MUTED)
 text(x + 210, 932, "or on held-out cases", 11, fill=MUTED)
 add(f'<path d="M590,819 L590,860" stroke="{CLS}" stroke-width="2" fill="none" marker-end="url(#ar)"/>')
 text(600, 850, "soft labels, T = 4", 11, fill=CLS)
+text(56, 985, "Images: VALDO 2021 case sub-103 (examples/valdo, CC BY-NC-SA 4.0); one axial slice, its FRST map and crops around reference microbleeds.", 10.5, fill=MUTED)
 text(56, 970, "Blocks: 3x3x3 conv + batch norm + ReLU; fully connected layers with 20 % dropout. Alternative: --disc_model cnn (small 3D CNN, image + FRST + probability).", 11, fill=MUTED)
 add("</svg>")
 path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "architecture.svg")
