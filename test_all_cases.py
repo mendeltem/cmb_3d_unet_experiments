@@ -130,16 +130,19 @@ def make_experiments(settings, train_folder):
             [["evaluate", "-m", model_folder("finetune"), "--csf_rule", "True", *predicting]],
             needs="finetune"),
 
+        # Step 2 learns from the candidates of the step-1 model on the training cases, so step 1 must already find
+        # some (real ones and false ones). A model trained from scratch for a few epochs finds none; therefore
+        # step 2 starts here from the fine-tuned pretrained model.
         Experiment(
             "step2_teacher_student",
-            "scratch + step-2 classifier, MicrobleedNet teacher-student",
-            [["train", "-i", train_folder, "-m", model_folder("step2_ts"), "--frst_from", "cmbx", "-cand_disc", "True", *training],
+            "fine-tuned + step-2 classifier, MicrobleedNet teacher-student",
+            [["fine_tune", "-i", train_folder, "-m", "pre", "-o", model_folder("step2_ts"), "-cand_disc", "True", *training],
              ["evaluate", "-m", model_folder("step2_ts"), "-cand_disc", "True", *predicting]]),
 
         Experiment(
             "step2_cnn",
-            "scratch + step-2 classifier, small CNN",
-            [["train", "-i", train_folder, "-m", model_folder("step2_cnn"), "--frst_from", "cmbx", "-cand_disc", "True",
+            "fine-tuned + step-2 classifier, small CNN",
+            [["fine_tune", "-i", train_folder, "-m", "pre", "-o", model_folder("step2_cnn"), "-cand_disc", "True",
               "--disc_model", "cnn", *training],
              ["evaluate", "-m", model_folder("step2_cnn"), "-cand_disc", "True", *predicting]]),
 
