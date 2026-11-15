@@ -153,7 +153,8 @@ def cmd_predict(a):
                 stage2=a.stage2, no_stage2=a.no_stage2)
 
 
-def main(argv=None):
+def build_parser() -> argparse.ArgumentParser:
+    """The whole ``cmbx`` command line (also used by the Python API, cmbx/api.py, to map keyword names to options)."""
     ap = argparse.ArgumentParser(prog="cmbx", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -284,7 +285,11 @@ def main(argv=None):
     p.add_argument("--no-stage2", action="store_true", help="first stage only, even if the run has a second stage")
     p.set_defaults(fn=cmd_predict)
 
-    a = ap.parse_args(argv)
+    return ap
+
+
+def main(argv=None):
+    a = build_parser().parse_args(argv)
     if os.environ.get("CMBX_DEBUG"):
         return a.fn(a)
     try:                         # user errors as one readable line; CMBX_DEBUG=1 shows the traceback

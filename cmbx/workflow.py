@@ -491,7 +491,11 @@ def train(a, log=print, fine_tune: bool = False) -> str:
     use_given_frst(cfg, rows, getattr(a, "frst_from", None), log)
     cfg["data"]["prepared_dir"] = _prepared_dir(work, cfg, inpaint)
     T = cfg["train"]
-    if not _given(a, "train_prop") and "train.train_prop" not in keys:
+    if getattr(a, "thr_on", None) == "train":           # all n cases train, the cell is chosen on them afterwards
+        if _given(a, "train_prop") and float(a.train_prop) < 1:
+            raise SystemExit("--thr_on train uses every case for training: leave out -tr_prop")
+        T["train_prop"], T["cell_on"] = 1.0, "train"
+    elif not _given(a, "train_prop") and "train.train_prop" not in keys:
         T["train_prop"] = 0.8                              # MicrobleedNet's default: 20 % of the cases held out
     if fine_tune:
         T["init_from"] = init
@@ -609,7 +613,8 @@ def raw_images(inp: str, image_regex: str, fsl_preprocessed: bool):
     the file name before ``<regex>``, without -f True prefixed by the parent folder (``<folder>-<name>``)."""
     out = []
     for p in sorted(glob.glob(os.path.join(inp, "**", f"*{image_regex}.nii*"), recursive=True)):
-        basepath = p.split(image_regex)[0]
+        folder, fname = os.path.split(p)                   # split the FILE name only: a folder such as scans_T2_all
+        basepath = os.path.join(folder, fname.split(image_regex)[0])   # must not cut the path (-ir _T2)
         name = basepath.split(os.sep)[-1]
         if not fsl_preprocessed:
             name = basepath.split("/")[-2] + "-" + name
@@ -632,6 +637,12 @@ def preprocess(a, log=print) -> str:
     out = a.out_dir
     os.makedirs(out, exist_ok=True)
     items = raw_images(a.inp_dir, a.image_regex, a.fsl_preprocessed)
+    if getattr(a, "ids", None) or getattr(a, "exclude", None):    # same id files as make-caselist
+        from .caselist import read_ids
+        keep = set(read_ids(a.ids)) if a.ids else None
+        drop = set().union(*[set(read_ids(f)) for f in (a.exclude or [])])
+        bare = lambda it: os.path.basename(it[2])           # the id without MicrobleedNet's '<folder>-' prefix
+        items = [it for it in items if (keep is None or bare(it) in keep) and bare(it) not in drop]
     if not items:
         raise SystemExit(f"{a.inp_dir}: no file matches **/*{a.image_regex}.nii*")
     if a.label_dir and not a.label_regex:
@@ -659,7 +670,16 @@ def preprocess(a, log=print) -> str:
                 with tempfile.TemporaryDirectory(dir=out) as tmp:
                     t = lambda f: os.path.join(tmp, f)
                     subprocess.run([_fsl("fslreorient2std"), path, t("INPUT.nii.gz")], check=True)
-                    subprocess.run([_fsl("bet"), t("INPUT.nii.gz"), t("INPUT_brain.nii.gz"), "-m"], check=True)
+                    given = _find(a.brain_dir, os.path.basename(basepath), [a.brain_regex], next_to=basepath) if a.brain_dir else None
+                    if a.brain_dir and not given:
+                        missing.append((name, f"brain mask {os.path.basename(basepath)}{a.brain_regex} in {a.brain_dir}"))
+                        continue
+                    if given:                              # your own brain mask instead of BET, then FAST as usual
+                        subprocess.run([_fsl("fslreorient2std"), given, t("INPUT_brain_mask.nii.gz")], check=True)
+                        subprocess.run([_fsl("fslmaths"), t("INPUT.nii.gz"), "-mas", t("INPUT_brain_mask.nii.gz"),
+                                        t("INPUT_brain.nii.gz")], check=True)
+                    else:
+                        subprocess.run([_fsl("bet"), t("INPUT.nii.gz"), t("INPUT_brain.nii.gz"), "-m"], check=True)
                     subprocess.run([_fsl("fast"), "-B", "--nopve", t("INPUT_brain.nii.gz")], check=True)
                     shutil.copyfile(t("INPUT_brain_restore.nii.gz"), img)
                     shutil.copyfile(t("INPUT_brain_mask.nii.gz"), brain)
@@ -845,6 +865,10 @@ def _common_train(p, fine_tune: bool = False, cv: bool = False) -> None:
     g.add_argument("-opt", "--optimizer", choices=["adam", "sgd", "adamw"], default=None, help="[adamw]")
     g.add_argument("-eps", "--epsilon", type=float, default=None, help="Adam epsilon [1e-8]")
     g.add_argument("-mom", "--momentum", type=float, default=None, help="SGD momentum [0.9]")
+    if not cv:
+        g.add_argument("--thr_on", choices=["held_out", "train"], default=None,
+                       help="choose threshold and min size on held-out cases (-tr_prop) or on the training cases "
+                            "themselves (all cases train; the paper protocol for n annotated scans) [held_out]")
     g.add_argument("-bs", "--batch_size", type=int, default=None, help="[4]")
     g.add_argument("-ep", "--num_epochs", type=int, default=None, help="[60]")
     g.add_argument("-es", "--early_stop_val", type=int, default=None, help="epochs without held-out gain [off]")
@@ -903,7 +927,10 @@ def add_parsers(sub, log) -> None:
     o.add_argument("-l", "--label_dir", default=None, help="folder with the microbleed masks (written as <name>_cmb)")
     o.add_argument("-lr", "--label_regex", nargs="+", default=None, help="ending(s) of the mask names, e.g. _cmb.nii.gz")
     o.add_argument("-f", "--fsl_preprocessed", type=B, default=False, help="scans already skull-stripped + bias-corrected")
-    o.add_argument("-b", "--brain_dir", default=None, help="with -f True: folder with your brain masks [image > 0]")
+    o.add_argument("-b", "--brain_dir", default=None, help="folder with your brain masks; with -f True [image > 0], "
+                   "without it they replace BET before FAST [BET]")
+    o.add_argument("--ids", default=None, help="file with the case ids to process (as make-caselist --ids)")
+    o.add_argument("--exclude", action="append", default=[], help="file with ids to leave out (as make-caselist); repeatable")
     o.add_argument("-br", "--brain_regex", default="_brainmask.nii.gz", help="ending of the brain mask names")
     o.add_argument("-flr", "--flair_regex", default=None, help="ending of the FLAIR scans of the same session, e.g. _FLAIR")
     o.add_argument("-fl", "--flair_dir", default=None, help="folder with the FLAIR scans [-i]")

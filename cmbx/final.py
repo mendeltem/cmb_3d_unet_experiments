@@ -10,7 +10,9 @@ below are used. Everything else is the training recipe of the CV (same sampling,
 With ``train.train_prop`` < 1 (MicrobleedNet ``-tr_prop``; ``cmbx train`` uses 0.8) a random share of the cases is held
 out: every ``eval_every`` epochs it is predicted, the operating cell is chosen on it, ``checkpoint: best`` keeps the best
 state, ``early_stop`` stops after that many epochs without gain. Without held-out cases the cell is the CV choice or
-the default, and the last state is kept.
+the default, and the last state is kept. With ``train.cell_on: train`` (``--thr_on train``) all cases train and the
+cell is chosen afterwards on these training cases themselves (the protocol of the clinical paper for n annotated scans;
+in-sample, so its F1 is optimistic).
 
 Output: ``<run>/final/model.pt`` (weights + everything needed to apply it: model, channels, patch, cell,
 preprocessing settings) and ``<run>/final/meta.json``; with held-out cases also ``model_best.pt``; ``everyN`` adds
@@ -175,7 +177,15 @@ def train_final(cfg: Dict, run_dir: str, log=print, overwrite: bool = False) -> 
             log(f"[final] early stop after epoch {ep}: no held-out gain for {patience} epochs (best epoch {best['epoch']})")
             break
     model = unwrap(model)
-    if val_ids and not any(len(recs[s].components) for s in val_ids):
+    if T.get("cell_on", "held_out") == "train":           # --thr_on train: the cell chosen on the training cases themselves
+        model.eval()
+        rows = [grid_rows(predict_volume(model, recs[s].channels(T["channels"]), patch, device, int(P["batch_size"]),
+                                         bool(T["amp_bf16"]), bool(P["tta_flip"]))[0], recs[s].label, thr_grid, size_grid,
+                          maxvox, recs[s].tissue if csf else None, PP["csf_labels"]) for s in train_ids]
+        thr, mind, sm, _ = choose_cell(rows, thr_grid, size_grid, S["fallback"])
+        cell, cell_source = (thr, mind), f"the {len(train_ids)} training cases themselves (--thr_on train, in-sample F1 {sm['f1']:.3f})"
+        log(f"[final] operating cell chosen on the training cases: threshold {thr}, min size {mind} (in-sample F1 {sm['f1']:.3f})")
+    elif val_ids and not any(len(recs[s].components) for s in val_ids):
         if ckpt == "best":
             model.load_state_dict(best["state"])
         cell, cell_source = cell or DEFAULT_CELL, "default (the held-out cases have no reference lesion)"

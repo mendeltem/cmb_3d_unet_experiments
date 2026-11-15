@@ -316,3 +316,43 @@ def test_fine_tune_keeps_the_network_and_grid_of_the_start_model(cohort):
     got = yaml.safe_load(open(os.path.join(ft, "config.yaml")))
     assert got["model"]["base_channels"] == 8 and got["train"]["patch_size"] == [16, 32, 32]
     assert got["preprocess"]["spacing"] == [1.0, 1.0, 2.0]
+
+
+def test_case_names_when_a_parent_folder_contains_the_ending(tmp_path):
+    """Regression: the ending (-ir) cut the WHOLE path, so a parent folder such as scans_T2_all/ gave every scan the
+    same case name. Only the file name is cut now."""
+    for sub in ("sub-001", "sub-002"):
+        d = tmp_path / "scans_T2_all" / sub / "anat"
+        d.mkdir(parents=True)
+        (d / f"{sub}_T2.nii.gz").write_bytes(b"")
+    assert [x[0] for x in raw_images(str(tmp_path / "scans_T2_all"), "_T2", True)] == ["sub-001", "sub-002"]
+    assert [x[0] for x in raw_images(str(tmp_path / "scans_T2_all"), "_T2", False)] == ["anat-sub-001", "anat-sub-002"]
+
+
+def test_preprocess_ids_and_exclude(tmp_path):
+    src = write_phantom_preprocessed(str(tmp_path / "src"), 3, 0)
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    for n in ("phantom-00", "phantom-01", "phantom-02"):
+        os.link(os.path.join(src, "derivatives", "preprocessed", n, f"{n}_t2star.nii.gz"), raw / f"{n}_T2S.nii.gz")
+    (tmp_path / "ids.txt").write_text("phantom-00\nphantom-01\n")
+    (tmp_path / "drop.txt").write_text("phantom-01\n")
+    out = tmp_path / "out"
+    main(["preprocess", "-i", str(raw), "-ir", "_T2S", "-o", str(out), "-f", "True", "--ids", str(tmp_path / "ids.txt"),
+          "--exclude", str(tmp_path / "drop.txt")])
+    assert sorted(d for d in os.listdir(out) if os.path.isdir(out / d)) == ["phantom-00"]
+
+
+def test_fine_tune_thr_on_train_chooses_the_cell_on_the_training_cases(cohort):
+    """--thr_on train (paper protocol): every case trains, the cell is chosen on these cases afterwards."""
+    import json
+    tmp, train, _ = cohort
+    m, ft = str(tmp / "thr_m"), str(tmp / "thr_ft")
+    main(["train", "-i", train, "-l", train, "-m", m, "--config", CFG, "-ep", "1"])
+    main(["fine_tune", "-i", train, "-l", train, "-m", m, "-o", ft, "--config", CFG, "-ep", "1", "--thr_on", "train"])
+    meta = json.load(open(os.path.join(ft, "final", "meta.json")))
+    assert meta["held_out"] == [] and meta["train_cases"] == meta["cases"] == 10
+    assert meta["cell_source"].startswith("the 10 training cases themselves")
+    with pytest.raises(SystemExit, match="leave out -tr_prop"):
+        main(["fine_tune", "-i", train, "-l", train, "-m", m, "-o", ft + "2", "--config", CFG, "-ep", "1",
+              "--thr_on", "train", "-tr_prop", "0.8"])

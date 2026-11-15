@@ -28,6 +28,8 @@ source env.sh
 
 - Installs Python, PyTorch for your GPU, `cmbx` and the pretrained model. Ends with `ALL REQUIRED CHECKS PASSED`.
 - `source env.sh` in every new shell.
+- An existing conda env named `cmbx` is reused as it is, and its `cmbx` then points to this clone (the installer
+  prints a WARNING). A clean or separate env: `./install.sh --recreate` or `./install.sh --name <new name>`.
 
 ## Data
 
@@ -57,7 +59,11 @@ cmbx preprocess -i examples/raw -ir _T2starw -f True -b examples/raw -br _brainm
 ```
 
 - Writes one folder per case and `../my_runs/cohort/files.xlsx`.
-- Without `-f True`: skull stripping and bias correction with FSL (BET + FAST), as MicrobleedNet.
+- Without `-f True`: skull stripping and bias correction with FSL (BET + FAST), as MicrobleedNet. With `-b` your own
+  brain masks replace BET (FAST as usual).
+- Case names: the file name before the `-ir` ending; without `-f True` prefixed by the parent folder
+  (`<folder>-<name>`, as MicrobleedNet). Only the file name is cut at the ending, never a folder name.
+- `--ids ids.txt` processes only these cases, `--exclude drop.txt` leaves cases out (one id per line, as `make-caselist`).
 - FLAIR (`-flr`, same session): BET, FAST (FSL, also with `-f True`), then onto the T2* by the scanner coordinates
   (`--flair_registered True` if it is already: no FSL).
 - `--synthseg True` adds the tissue map (FreeSurfer; from the FLAIR when there is one). `-mod swi` names the scan `_swi`.
@@ -115,6 +121,16 @@ cmbx fine_tune -i examples/train/derivatives -l examples/train/derivatives/prepr
 ```
 
 - `-m pre`: the pretrained VALDO model (trained with the cmbx FRST, which it keeps); or any model folder. Learning rate 0.0001.
+- Defaults: 60 epochs; 20 % of your cases (`-tr_prop 0.8`) are held out to choose threshold and minimum size. With
+  few scans that is very few cases (2 of 10).
+- Paper protocol (n annotated scans, clinical paper): all n scans train and threshold and minimum size are chosen on
+  these n scans themselves (in-sample), 30 epochs:
+
+```bash
+cmbx fine_tune -i examples/train/derivatives -l examples/train/derivatives/preprocessed -m pre -o ../my_runs/my_finetuned_paper --thr_on train -ep 30
+```
+
+- `-m pre` was trained on T2* only: on SWI expect a low F1 before fine-tuning.
 
 ## Predict
 
@@ -155,7 +171,56 @@ model is. `python test.py` stays the quick check that every function works.
 
 ## From Python
 
-The same steps as plain Python scripts, written out one by one so that you can read and change each: the cases onto the
+Three short tutorials. They read every path from `.env` in the repository root, which is filled for the shipped
+synthetic examples, so a fresh clone runs them as is, from any folder. For your own data edit only `.env`
+(`.env.example` explains each variable) and leave `CMB_TRAIN_CONFIG` / `CMB_FINETUNE_CONFIG` empty: they only
+make the quick try on the synthetic examples small (configs/quick_*.yaml).
+
+```bash
+python examples/python/tutorial_predict.py
+```
+
+```python
+from cmbx import env, get_model, predict
+
+e = env()  # CMB_SCAN, CMB_BRAIN_MASK, CMB_OUTPUT_DIR from .env
+model = get_model("valdo_t2")  # the VALDO 2021 U-Net (CC BY-NC-SA 4.0), downloaded once into models/
+result = predict(e["CMB_SCAN"], model, brain_mask=e["CMB_BRAIN_MASK"], out_dir=e["CMB_OUTPUT_DIR"])
+print(result["n_lesions"], "microbleeds, mask:", result["mask"])
+```
+
+```bash
+python examples/python/tutorial_train.py
+```
+
+```python
+from cmbx import env, train
+
+e = env()  # CMB_INPUT_DIR, CMB_LABEL_DIR, CMB_MODEL_DIR, CMB_TRAIN_CONFIG from .env
+model = train(e["CMB_INPUT_DIR"], e["CMB_MODEL_DIR"], label_dir=e["CMB_LABEL_DIR"], config=e["CMB_TRAIN_CONFIG"],
+              epochs=2)  # 2 = a quick try on the synthetic examples; for real data leave it out (60)
+print("model:", model)
+```
+
+```bash
+python examples/python/tutorial_finetune.py
+```
+
+```python
+from cmbx import env, fine_tune
+
+e = env()  # CMB_INPUT_DIR, CMB_LABEL_DIR, CMB_FINETUNED_DIR, CMB_FINETUNE_CONFIG from .env
+model = fine_tune(e["CMB_INPUT_DIR"], e["CMB_FINETUNED_DIR"], label_dir=e["CMB_LABEL_DIR"], config=e["CMB_FINETUNE_CONFIG"],
+                  epochs=2)  # 2 = a quick try on the synthetic examples; for real data leave it out (60)
+# Paper protocol (threshold and minimum size chosen on the training scans themselves): add  thr_on="train", epochs=30
+print("fine-tuned model:", model)
+```
+
+- `from cmbx import env, get_model, predict, train, fine_tune` (cmbx/api.py): the cmbx commands as functions;
+  keyword options are the long command-line names (`num_epochs` or `epochs`, `frst`, `csf_rule`, `device`, ...).
+- `predict` returns the number of microbleeds and the mask path; `stage2="valdo_classifier"` adds the second stage.
+
+The longer scripts below write the same steps out one by one so that you can read and change each: the cases onto the
 model grid, patches, loss, optimizer, the threshold chosen on held-out cases, the masks back on the scan.
 
 ```bash

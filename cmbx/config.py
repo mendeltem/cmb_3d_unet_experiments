@@ -76,6 +76,7 @@ DEFAULTS: Dict[str, Any] = {
         "lr_gamma": 0.1,
         "train_prop": 1.0,                       # final model: share of cases trained on; the rest chooses the
                                                  # threshold, the best epoch and early stopping (-tr_prop)
+        "cell_on": "held_out",                   # held_out (train_prop < 1) or train: cell chosen on the training cases (--thr_on)
         "early_stop": 0,                         # epochs without validation gain before stopping; 0 = off (-es)
         "checkpoint": "last",                    # last | best | everyN: the state kept as final/model.pt (-cp_type)
         "checkpoint_every": 10,                  # everyN: also final/model_epoch<N>.pt every N epochs (-cp_n)

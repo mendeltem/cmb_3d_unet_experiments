@@ -63,7 +63,7 @@ if [ -n "$CONDA" ]; then
         say "--recreate: removing the existing environment"
         env -u CONDA_PREFIX -u CONDA_DEFAULT_ENV -u CONDA_SHLVL "$CONDA" env remove -y "${LOC[@]}"
     fi
-    if "$CONDA" run "${LOC[@]}" python -V >/dev/null 2>&1; then say "env exists, reusing it (--recreate builds it new)"
+    if "$CONDA" run "${LOC[@]}" python -V >/dev/null 2>&1; then say "WARNING: environment ${PREFIX:-$NAME} exists: reusing it as it is, and its cmbx now points to this clone ($REPO); another clone that used it runs this code from now on. A clean or separate one: --recreate, or --name <new name>"
     elif ! "$CONDA" create -y "${LOC[@]}" --override-channels -c conda-forge "python=$PY_VERSION" pip; then
         say "conda create failed (network? see above): falling back to a venv in .venv"
         CONDA=""; KIND="venv"

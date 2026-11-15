@@ -1,0 +1,8 @@
+# Quick try of tutorial_train.py on the shipped synthetic examples (CPU, about a minute): a narrow network and few
+# patches. For real data leave CMB_TRAIN_CONFIG in .env empty: the full recipe (width 32, 800 patches per epoch).
+model:
+  base_channels: 8
+train:
+  n_patches: 16
+  patch_size: [16, 32, 32]
+  eval_every: 1

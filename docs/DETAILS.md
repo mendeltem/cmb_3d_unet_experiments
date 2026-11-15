@@ -328,6 +328,7 @@ even "False", as true).
 |---|---|---|
 | `-i`, `-l`, `-m`, `-o` | as MicrobleedNet; `-l` may be the same folder as `-i` | |
 | `-tr_prop` | share of cases trained on; the rest choose threshold, minimum size, best epoch and early stop | train: 0.8 |
+| `--thr_on` | `held_out`: threshold and minimum size chosen on the `-tr_prop` held-out cases; `train`: every case trains and they are chosen on the training cases themselves (in-sample; the clinical paper's protocol for n annotated scans; no `-tr_prop`, no `best` checkpoint, no early stop) | `held_out` |
 | `-es` | stop after N epochs without gain on the held-out cases (cross_validate: on the inner fold) | off |
 | `-cp_type`, `-cp_n` | `last`, `best` (on held-out cases) or `everyN` (also `final/model_epoch<N>.pt`); evaluate loads the same | last |
 | `-sv_resume` | save `final/resume.pt` every epoch and continue from it | False |
