@@ -6,7 +6,7 @@ candidate: microbleed or not (the design of MicrobleedNet's discriminator; Sunda
 
     cmbx stage2 <run>                       # train + nested CV on the run's out-of-fold maps -> <run>/stage2/
     cmbx stage2 <run> --init <classifier>   # fine-tune from a trained classifier (a run, a stage2/classifier.pt, or
-                                            # the classifier.pt of the microbleed_detection_3D_UNET release)
+                                            # models/valdo_classifier from cmbx get-model)
     cmbx predict --run <run> ...            # uses <run>/stage2/classifier.pt automatically (--no-stage2 to skip)
 
 Recipe (ported from cmb-valdo-chain ``cmb/stage2``, same numbers): candidates = 26-connected components of the
@@ -346,7 +346,7 @@ def score(nets: List[nn.Module], cubes: np.ndarray, crop, device: str, batch: in
 
 def load_bundle(source: str) -> Dict:
     """A classifier bundle (``{"members": [state, ...], "threshold": t, ...}``): a run folder, its
-    stage2/classifier.pt, or the classifier.pt of the microbleed_detection_3D_UNET release (same architecture)."""
+    stage2/classifier.pt, or a released classifier.pt (models/valdo_classifier; same architecture)."""
     path = source
     if os.path.isdir(source):
         path = os.path.join(source, "stage2", "classifier.pt")

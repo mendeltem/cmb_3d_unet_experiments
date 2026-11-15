@@ -221,9 +221,27 @@ Details and sources: [docs/DETAILS.md](docs/DETAILS.md#differences-to-microbleed
 - MicrobleedNet: https://github.com/v-sundaresan/microbleed-detection
 - Issues: https://github.com/mendeltem/cmb_3d_unet_experiments/issues
 
+## Pretrained models
+
+```bash
+cmbx get-model --list
+```
+
+- `valdo_t2`: the step-1 U-Net (two seeds), downloaded by `install.sh`. `valdo_classifier`: the optional step-2
+  classifier (`cmbx predict --run models/valdo_t2 --stage2 models/valdo_classifier ...`).
+- Both are trained on VALDO 2021 Task 2 only, and their thresholds are chosen on VALDO only. No in-house data went
+  into any released weight or default.
+- Files: release [v0.2.0](https://github.com/mendeltem/cmb_3d_unet_experiments/releases/tag/v0.2.0), SHA-256 checked on download.
+- The weights moved: they used to come from the microbleed_detection_3D_UNET v0.1.0 release and now come from this
+  repository's own release. The `valdo_t2` files are unchanged (same SHA-256).
+- The old `cmb_classifier` is replaced because it was not VALDO-only: it was also trained on in-house candidates.
+  The name still works and now fetches the VALDO-only classifier. Folders downloaded before v0.2.0: run
+  `cmbx get-model valdo_t2` and `cmbx get-model cmb_classifier` again to get the new defaults and file.
+
 ## Licensing
 
-- Code: MIT. Pretrained VALDO weights: CC BY-NC-SA 4.0 (non-commercial).
+- Code: MIT. Pretrained weights (`valdo_t2`, `valdo_classifier`): CC BY-NC-SA 4.0, derived from the VALDO data
+  (non-commercial, share alike, cite VALDO).
 - Cite MicrobleedNet: Sundaresan et al., Front Neuroinform 2023, doi:10.3389/fninf.2023.1204186.
 - Cite VALDO: Sudre et al., Med Image Anal 2024, doi:10.1016/j.media.2023.103029.
 - Patient data never go into this repository.

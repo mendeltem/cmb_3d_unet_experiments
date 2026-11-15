@@ -274,16 +274,16 @@ The numbers on phantoms say nothing about real data.
 ## Pretrained model and fine-tuning
 
 `models/valdo_t2` (downloaded by `install.sh`, or `cmbx get-model valdo_t2`): this U-Net trained on all 72 public VALDO
-2021 cases (T2*-GRE), the released weights of microbleed_detection_3D_UNET v0.1.0 (SHA-256 checked; outputs identical
-to that package, max difference 0.0), as a run folder with `final/` (seed 42) and `fold0/`, `fold1/` (seeds 42 and 1,
-`--folds` averages them). Licence of the weights: CC BY-NC-SA 4.0, see `models/valdo_t2/MODEL_CARD.md`.
+2021 Task 2 cases (T2*-GRE) and nothing else, as a run folder with `final/` (seed 42) and `fold0/`, `fold1/` (seeds 42
+and 1, `--folds` averages them). The files are those of microbleed_detection_3D_UNET v0.1.0 (same SHA-256), now hosted
+in this repository's release v0.2.0. Licence of the weights: CC BY-NC-SA 4.0, see `models/valdo_t2/MODEL_CARD.md`.
 
-Measured on an unseen in-house T2* cohort (75 cases): pooled lesion F1 0.47 at the released stage-1 cell (threshold
-0.6, 2 mm3); it rises with the threshold up to 0.56 at 0.9 (chosen on those cases, so optimistic); a model trained
-there reaches 0.67. Full-data models give higher probabilities than cross-validation models: on new data calibrate
-`--threshold` on a few labelled cases, or fine-tune. Fine-tuning (`train.init_from=models/valdo_t2 train.lr=0.0001`),
-one fold of that cohort, 6 epochs (7 min on one GPU): F1 0.66, against 0.55 for 6 epochs and 0.63 for 60 epochs from
-scratch (one fold, one seed; seed noise about +-0.03 to 0.08). With the default lr 3e-4 the gain was smaller (0.59).
+Default cell: threshold 0.3, >= 8 grid voxels (2 mm3), chosen on VALDO only (nested 5-fold cross-validation; every fold
+chose 0.3). Until v0.1.0 the default was 0.6, a value measured on an in-house cohort; it was replaced so that no
+in-house information is in a released default. Full-data models give higher probabilities than cross-validation models,
+so on a new scanner 0.3 can over-detect: add the second stage (`--stage2 models/valdo_classifier`), set `--threshold`
+on a few labelled scans, or fine-tune (`train.init_from=models/valdo_t2 train.lr=0.0001`; a few epochs on one fold were
+enough in our tests, with the default lr 3e-4 the gain was smaller).
 Input channels are matched by name: a new channel starts at zero weight (the network first computes exactly the
 pretrained output), a dropped one is removed; `model.base_channels` must stay 32.
 
@@ -296,10 +296,10 @@ alarms. The second stage (`cmbx/stage2.py`, ported from cmb-valdo-chain `cmb/sta
 
 ```bash
 cmbx stage2 ../my_runs/runs/my_run                      # train it on the run's out-of-fold maps (nested CV) -> stage2/
-cmbx get-model cmb_classifier                           # the released pooled classifier (research use only, opt-in)
-cmbx stage2 ../my_runs/runs/my_run --init models/cmb_classifier --epochs 10    # fine-tune it on your candidates
+cmbx get-model valdo_classifier                         # the released VALDO-only classifier (opt-in)
+cmbx stage2 ../my_runs/runs/my_run --init models/valdo_classifier --epochs 10  # fine-tune it on your candidates
 cmbx predict --run ../my_runs/runs/my_run --image scan.nii.gz --out pred        # uses stage2/ when present
-cmbx predict --run models/valdo_t2 --stage2 models/cmb_classifier --image scan.nii.gz --out pred   # any combination
+cmbx predict --run models/valdo_t2 --stage2 models/valdo_classifier --image scan.nii.gz --out pred   # any combination
 ```
 `--no-stage2` switches it off; `stage2.enabled=true` trains it inside `run-experiment`.
 

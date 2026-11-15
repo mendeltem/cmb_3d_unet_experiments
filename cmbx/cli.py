@@ -189,7 +189,7 @@ def main(argv=None):
 
     p = sub.add_parser("stage2", help="train (or fine-tune) the optional second-stage 3D classifier of a finished run")
     p.add_argument("run", help="run folder with finished CV folds (their out-of-fold maps are the training data)")
-    p.add_argument("--init", default=None, help="fine-tune from a classifier: run folder, classifier.pt or models/cmb_classifier")
+    p.add_argument("--init", default=None, help="fine-tune from a classifier: run folder, classifier.pt or models/valdo_classifier")
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--members", type=int, default=None)
     p.add_argument("--lr", type=float, default=None)
@@ -280,7 +280,7 @@ def main(argv=None):
     p.add_argument("--folds", action="store_true", help="use the 5 fold models (mean probability) instead of the final model")
     p.add_argument("--grid-only", action="store_true", help="skip the outputs on the input image grid")
     p.add_argument("--stage2", default=None, help="second-stage classifier to apply (run folder, classifier.pt, "
-                                                   "models/cmb_classifier); default: the run's own stage2/ if it exists")
+                                                   "models/valdo_classifier); default: the run's own stage2/ if it exists")
     p.add_argument("--no-stage2", action="store_true", help="first stage only, even if the run has a second stage")
     p.set_defaults(fn=cmd_predict)
 

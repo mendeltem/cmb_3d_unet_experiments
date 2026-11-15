@@ -96,7 +96,7 @@ DEFAULTS: Dict[str, Any] = {
     "predict": {"batch_size": 8, "tta_flip": False},
     "stage2": {                                  # OPTIONAL second stage: 3D CNN re-checks every candidate (cmbx/stage2.py)
         "enabled": False,                        # true: run-experiment trains it after the CV (also: cmbx stage2 <run>)
-        "init_from": None,                       # fine-tune from a classifier (run folder, classifier.pt, models/cmb_classifier)
+        "init_from": None,                       # fine-tune from a classifier (run folder, classifier.pt, models/valdo_classifier)
         "low_threshold": 0.15, "min_voxels": 4, "max_voxels": 2100,
         "members": 3, "epochs": 40, "batch_size": 16, "lr": 1.0e-3, "weight_decay": 1.0e-3,
         "method": "cnn",                         # cnn (released classifier) | teacher_student (MicrobleedNet step 2)
